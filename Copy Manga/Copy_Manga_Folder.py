@@ -1,14 +1,21 @@
 import os
+import sys
 import shutil
 import subprocess
 from pathlib import Path
 
+# Ensure shared configuration is available
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
+from shared.config import resolve_path, is_dry_run_requested
+
 def authenticate_smb(share_path, username, password):
+    if os.name != "nt":
+        return
     print(f"Authenticating with network share {share_path}...")
-    # Windows command to authenticate a network share
     cmd = f'net use "{share_path}" "{password}" /user:"{username}"'
-    
-    # Run the command silently
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     
     if result.returncode == 0 or "multiple connections" in result.stderr.lower():
@@ -23,12 +30,11 @@ def sync_mihon_to_categorized(source_dir, dest_dir, dry_run=True):
 
     if not source_root.exists() or not dest_root.exists():
         print(f"Error: Could not find the Source or Destination on the network.")
-        print(f"Please check if the paths are correct and the share is accessible.")
+        print(f"Source: {source_root} (exists: {source_root.exists()})")
+        print(f"Dest:   {dest_root} (exists: {dest_root.exists()})")
         return
 
     print("Mapping Mihon source directory...")
-    # 1. Map existing Manga folders in the Source (Mihon).
-    # Expected Mihon structure: downloads / Provider (e.g., AllManga) / Manga Name
     source_mangas = {}
     for provider_dir in source_root.iterdir():
         if provider_dir.is_dir():
@@ -41,48 +47,41 @@ def sync_mihon_to_categorized(source_dir, dest_dir, dry_run=True):
 
     chapters_copied = 0
 
-    # 2. Walk the Destination directory (Categorized) to find matching Manga folders.
     for root, dirs, files in os.walk(dest_root):
         root_path = Path(root)
         manga_name = root_path.name
 
-        # If the current destination folder matches a Manga in the Mihon source
         if manga_name in source_mangas:
             source_manga_path = source_mangas[manga_name]
 
-            # Iterate through the chapters in the Mihon source
             for chapter_dir in source_manga_path.iterdir():
                 if chapter_dir.is_dir():
                     dest_chapter_path = root_path / chapter_dir.name
 
-                    # If this specific chapter is missing in the destination, copy it over
                     if not dest_chapter_path.exists():
                         print(f"[NEW] Copying: {manga_name} -> {chapter_dir.name}")
                         
                         if not dry_run:
-                            # Perform the actual copy of the folder and its contents over the network
                             shutil.copytree(chapter_dir, dest_chapter_path)
                             
                         chapters_copied += 1
 
-            # Clear dirs so os.walk doesn't needlessly traverse inside the chapter folders in the destination
-            # This makes scanning the network share drastically faster.
             dirs.clear()
 
     print("-" * 40)
     if dry_run:
         print(f"[DRY RUN COMPLETE] {chapters_copied} chapters would be copied.")
-        print("To execute the copy, change 'dry_run=False' in the function call at the bottom.")
     else:
         print(f"[SYNC COMPLETE] Successfully copied {chapters_copied} new chapters.")
 
 if __name__ == "__main__":
+    SOURCE_DIRECTORY = resolve_path(r"Z:\Backup2\Vere\Mihon\downloads")
+    DESTINATION_DIRECTORY = resolve_path(r"Z:\Manga")
 
-    # --- NETWORK PATHS ---
-    # Update these paths if the internal structure inside Share2sgb is slightly different
-    SOURCE_DIRECTORY = r"Z:\Backup2\Vere\Mihon\downloads"
-    DESTINATION_DIRECTORY = r"Z:\Manga"
+    is_dry = is_dry_run_requested(default=True)
+    if is_dry:
+        print("\n--- DRY RUN INITIATED: No files will be moved or copied ---")
+    else:
+        print("\n--- LIVE RUN INITIATED: Files will be copied ---")
 
-    # Set dry_run=True to test what will be copied without moving any files.
-    # Set dry_run=False to actually copy the files over the network.
-    sync_mihon_to_categorized(SOURCE_DIRECTORY, DESTINATION_DIRECTORY, dry_run=False)
+    sync_mihon_to_categorized(SOURCE_DIRECTORY, DESTINATION_DIRECTORY, dry_run=is_dry)

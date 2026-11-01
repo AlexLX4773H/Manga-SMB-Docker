@@ -33,3 +33,7 @@ Desktop.ini
 
 # Reference only folder
 For_Reference_Only/
+
+# Local runtime data
+data/
+reports/

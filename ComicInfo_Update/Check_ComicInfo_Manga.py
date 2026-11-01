@@ -1,7 +1,16 @@
+import os
+import sys
 import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 from datetime import datetime
+
+# Ensure shared configuration is available
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
+from shared.config import resolve_paths, get_reports_dir, is_dry_run_requested
 
 def normalize_series_names(base_directories, report_filename="normalization_report.txt", dry_run=True):
     """
@@ -116,8 +125,8 @@ def normalize_series_names(base_directories, report_filename="normalization_repo
         print("\n✅ Processing complete. No files needed updating, so no report was generated.")
 
 if __name__ == "__main__":
-    # Define your list of target directories here
-    target_directories = [
+    # Define your list of target directories here (auto-mapped for Linux/Windows)
+    target_directories = resolve_paths([
         r"Z:\Manga\Manga_1\Axe",
         r"Z:\Manga\Manga_1\Completed",
         r"Z:\Manga\Manga_1\Completed Current3",
@@ -130,17 +139,13 @@ if __name__ == "__main__":
         r"Z:\Manga\Manga_A2\Current",
         r"Z:\Manga\Manga_A2\Current Axe4",
         r"Z:\Manga\Manga_A2\Current Old5"
-    ]
+    ])
     
-    # Set dry_run to True to safely test. Set to False to actually modify the files.
-    # normalize_series_names(
-    #     target_directories, 
-    #     report_filename="normalization_report.txt", 
-    #     dry_run=True  
-    # )
-
+    report_file = str(get_reports_dir() / "normalization_report.txt")
+    is_dry = is_dry_run_requested(default=True)
+    
     normalize_series_names(
         target_directories, 
-        report_filename="normalization_report.txt", 
-        dry_run=False  
+        report_filename=report_file, 
+        dry_run=is_dry
     )

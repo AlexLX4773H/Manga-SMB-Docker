@@ -1,7 +1,15 @@
 import os
+import sys
 import re
 import zipfile
 import pandas as pd
+
+# Ensure shared configuration is available
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
+from shared.config import resolve_paths, get_reports_dir
 
 def get_image_count(item_path):
     """
@@ -31,21 +39,18 @@ def parse_chapter_name(name):
     Extracts the base chapter and fractional part.
     Matches formats like 'Chapter 7.1_abc', 'Ch. 7', 'Vol.1 Ch. 2.5', or standalone '3.1_xxx'.
     """
-    # 1. Explicit Chapter/Ch keywords
     match = re.search(r'(?:ch(?:apter|\.)?)\s*(\d+)(?:\.(\d+))?', name, re.IGNORECASE)
     if match:
         base = int(match.group(1))
         frac = int(match.group(2)) if match.group(2) else 0
         return base, frac
 
-    # 2. Fallback: number patterns typically ending with an underscore (like '3.1_e34a04')
     match = re.search(r'(?<!\d)(\d+)(?:\.(\d+))?_', name)
     if match:
         base = int(match.group(1))
         frac = int(match.group(2)) if match.group(2) else 0
         return base, frac
 
-    # 3. Final fallback: First number sequence found in the string
     match = re.search(r'(?<!\d)(\d+)(?:\.(\d+))?', name)
     if match:
         base = int(match.group(1))
@@ -75,18 +80,15 @@ def find_duplicate_chapters(library_paths, margin=5):
             base_chapters = {}
             frac_chapters = {}
 
-            # Parse every chapter file/folder in the manga directory
             for chapter_entry in os.listdir(manga_path):
                 chapter_path = os.path.join(manga_path, chapter_entry)
                 
-                # Support both standard folders and CBZ files
                 is_cbz = chapter_path.lower().endswith('.cbz')
                 if not (os.path.isdir(chapter_path) or is_cbz):
                     continue
 
                 base, frac = parse_chapter_name(chapter_entry)
                 
-                # 1. Log every scanned chapter for the Verification Report
                 all_chapters_log.append({
                     'Library Location': library_path,
                     'Manga Title': manga_name,
@@ -99,56 +101,47 @@ def find_duplicate_chapters(library_paths, margin=5):
                 if base is None:
                     continue
 
-                # Ignore .5 chapters (omakes/specials) for the duplicate check
-                if frac == 5:
-                    continue
-
-                img_count = get_image_count(chapter_path)
-                
-                chap_info = {
-                    'name': chapter_entry,
-                    'images': img_count,
-                    'path': library_path
-                }
-
                 if frac == 0:
-                    # Store the base chapter (e.g., Chapter 7)
-                    if base not in base_chapters or base_chapters[base]['images'] < img_count:
-                        base_chapters[base] = chap_info
+                    base_chapters[base] = chapter_path
                 else:
-                    # Group fractional chapters (e.g., Chapter 7.1, 7.2)
                     if base not in frac_chapters:
                         frac_chapters[base] = []
-                    frac_chapters[base].append(chap_info)
+                    frac_chapters[base].append(chapter_path)
 
-            # 2. Check for duplicates by comparing page totals
-            for base, main_chap in base_chapters.items():
+            for base, main_path in base_chapters.items():
                 if base in frac_chapters:
-                    sub_chaps = frac_chapters[base]
-                    total_sub_images = sum(sub['images'] for sub in sub_chaps)
-                    main_images = main_chap['images']
+                    sub_paths = frac_chapters[base]
                     
-                    # Verify if counts match within the acceptable promo-page margin
-                    if abs(main_images - total_sub_images) <= margin:
-                        sub_names = ", ".join([sub['name'] for sub in sub_chaps])
-                        duplicate_data.append({
-                            'Library Location': main_chap['path'],
-                            'Manga Title': manga_name,
-                            'Base Chapter': main_chap['name'],
-                            'Base Pages': main_images,
-                            'Sub-Chapters Included': sub_names,
-                            'Sub-Chapters Total Pages': total_sub_images,
-                            'Page Difference': abs(main_images - total_sub_images)
-                        })
+                    main_count = get_image_count(main_path)
+                    sub_count_sum = sum(get_image_count(p) for p in sub_paths)
+
+                    difference = abs(main_count - sub_count_sum)
+                    is_match = difference <= margin
+
+                    duplicate_data.append({
+                        'Library Location': library_path,
+                        'Manga Title': manga_name,
+                        'Base Chapter': base,
+                        'Main Chapter Name': os.path.basename(main_path),
+                        'Main Image Count': main_count,
+                        'Sub-Chapters': ", ".join([os.path.basename(p) for p in sub_paths]),
+                        'Sub-Chapters Sum Count': sub_count_sum,
+                        'Page Count Difference': difference,
+                        'Duplicate Match (Tolerance <= 5)': "YES" if is_match else "NO (Differs)"
+                    })
 
     return duplicate_data, all_chapters_log
 
 def generate_reports(duplicate_data, all_chapters_log):
+    reports_dir = get_reports_dir()
+    log_report_path = str(reports_dir / "All_Chapters_Verification.xlsx")
+    dupe_report_path = str(reports_dir / "Duplicate_Chapters_Report.xlsx")
+
     # Output 1: Verification Report
     if all_chapters_log:
         df_log = pd.DataFrame(all_chapters_log)
-        df_log.to_excel("All_Chapters_Verification.xlsx", index=False)
-        print(f"Verification report generated: All_Chapters_Verification.xlsx ({len(df_log)} files scanned)")
+        df_log.to_excel(log_report_path, index=False)
+        print(f"Verification report generated: {log_report_path} ({len(df_log)} files scanned)")
     else:
         print("No chapters were found during the scan.")
 
@@ -157,12 +150,11 @@ def generate_reports(duplicate_data, all_chapters_log):
         print("No duplicates found. Your libraries are clean!")
     else:
         df_dupe = pd.DataFrame(duplicate_data)
-        df_dupe.to_excel("Duplicate_Chapters_Report.xlsx", index=False)
-        print(f"Duplicate report generated: Duplicate_Chapters_Report.xlsx ({len(df_dupe)} duplicates found)")
+        df_dupe.to_excel(dupe_report_path, index=False)
+        print(f"Duplicate report generated: {dupe_report_path} ({len(df_dupe)} duplicates found)")
 
 if __name__ == "__main__":
-    # Define your list of target directories to scan
-    LIBRARY_PATHS = [
+    LIBRARY_PATHS = resolve_paths([
         r"Z:\Manga\Manga_1\Axe",
         r"Z:\Manga\Manga_1\Completed",
         r"Z:\Manga\Manga_1\Completed Current3",
@@ -186,9 +178,8 @@ if __name__ == "__main__":
         r"Z:\Manga\Manhwa_CBZ_H3\Completed",
         r"Z:\Manga\Manhwa_CBZ_H3\Current U",
         r"Z:\Manga\Manhwa_CBZ_H3\Current Standard"
-    ]
+    ])
     
-    # Margin of error allowed between the base chapter and the sum of the sub-chapters.
     PAGE_TOLERANCE = 5  
 
     print(f"Scanning {len(LIBRARY_PATHS)} library locations...")

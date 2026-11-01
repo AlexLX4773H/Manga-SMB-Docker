@@ -1,0 +1,16 @@
+# Manga SMB Suite Configuration
+server:
+  host: "0.0.0.0"
+  port: 7070
+
+# Path Mapping
+# On Linux / CasaOS: /sg2b/Share2sgb
+# On Windows (Local): Z:
+manga_root: "/sg2b/Share2sgb"
+
+# Directories
+data_dir: "./data"
+reports_dir: "./data/reports"
+logs_dir: "./data/logs"
+database_path: "./data/mangarunner.db"
+

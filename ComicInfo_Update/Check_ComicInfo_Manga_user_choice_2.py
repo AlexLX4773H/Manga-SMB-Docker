@@ -1,13 +1,22 @@
+import os
+import sys
 import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 from datetime import datetime
 
+# Ensure shared configuration is available
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
+from shared.config import resolve_paths, get_reports_dir, is_dry_run_requested, should_auto_confirm
+
 def normalize_series_names(base_directories, report_filename="normalization_report.txt", dry_run=True):
     """
     Scans manga library directories, finds discrepancies in the <Series> tag, 
-    prompts the user to select the correct name, and generates a text report. 
-    Can be run in a 'dry run' mode to preview changes without modifying files.
+    prompts the user to select the correct name (or auto-selects most common in automated mode),
+    and generates a text report. Can be run in a 'dry run' mode to preview changes without modifying files.
     """
     
     # Register namespaces commonly found in Mihon/Tachiyomi metadata
@@ -75,7 +84,7 @@ def normalize_series_names(base_directories, report_filename="normalization_repo
                 print(f"[{series_folder.name}] All {len(xml_files)} files already match.")
                 continue
 
-            # INTERACTIVE PROMPT
+            # Check discrepancies
             print(f"\n[{series_folder.name}] Conflict found! Multiple Series names detected:")
             for i, name in enumerate(unique_names, 1):
                 print(f"  {i}. {name} (Count: {name_counts[name]})")
@@ -87,25 +96,33 @@ def normalize_series_names(base_directories, report_filename="normalization_repo
             print(f"  {skip_option_idx}. [Skip this folder]")
 
             target_series = None
-            while True:
-                try:
-                    choice = int(input("Enter your choice: "))
-                    if 1 <= choice <= len(unique_names):
-                        target_series = unique_names[choice - 1]
-                        break
-                    elif choice == custom_option_idx:
-                        target_series = input("Enter the custom series name: ").strip()
-                        if target_series:  # Ensure it's not empty
+            if should_auto_confirm():
+                target_series = unique_names[0]
+                print(f"[AUTO-SELECT] Non-interactive mode: Auto-selected #1 '{target_series}'")
+            else:
+                while True:
+                    try:
+                        choice = int(input("Enter your choice: "))
+                        if 1 <= choice <= len(unique_names):
+                            target_series = unique_names[choice - 1]
+                            break
+                        elif choice == custom_option_idx:
+                            target_series = input("Enter the custom series name: ").strip()
+                            if target_series:
+                                break
+                            else:
+                                print("Name cannot be empty. Please try again.")
+                        elif choice == skip_option_idx:
+                            print("Skipping this folder.")
                             break
                         else:
-                            print("Custom name cannot be empty. Try again.")
-                    elif choice == skip_option_idx:
-                        target_series = None
+                            print("Invalid option number. Please try again.")
+                    except ValueError:
+                        print("Invalid input. Please enter a number.")
+                    except EOFError:
+                        target_series = unique_names[0]
+                        print(f"[EOF] Defaulting to #1 '{target_series}'")
                         break
-                    else:
-                        print("Invalid choice. Try again.")
-                except ValueError:
-                    print("Please enter a valid number.")
 
             if target_series is None:
                 print("Skipping folder...\n")
@@ -117,13 +134,10 @@ def normalize_series_names(base_directories, report_filename="normalization_repo
             
             for xml_file, tree, series_elem, current_name in parsed_data:
                 if current_name != target_series:
-                    
-                    # Only apply and save the changes if we are NOT in a dry run
                     if not dry_run:
                         series_elem.text = target_series
                         tree.write(xml_file, encoding="UTF-8", xml_declaration=True)
                     
-                    # Log the specific change
                     action_word = "Would change" if dry_run else "Changed"
                     folder_report_lines.append(f"  - {xml_file.name} in '{xml_file.parent.name}'")
                     folder_report_lines.append(f"    {action_word} from: '{current_name}' -> '{target_series}'")
@@ -131,7 +145,6 @@ def normalize_series_names(base_directories, report_filename="normalization_repo
                     folder_updates += 1
                     total_files_changed += 1
             
-            # If changes were identified, add them to the main report
             if folder_updates > 0:
                 report_lines.append(f"[{series_folder.name}]")
                 report_lines.append(f"Target Series Name: '{target_series}'")
@@ -156,25 +169,26 @@ def normalize_series_names(base_directories, report_filename="normalization_repo
         print("\n✅ Processing complete. No files needed updating, so no report was generated.")
 
 if __name__ == "__main__":
-    # Define your list of target directories here
-    target_directories = [
-            r"Z:\Manga\Manga_1\Axe",
-            r"Z:\Manga\Manga_1\Completed",
-            r"Z:\Manga\Manga_1\Completed Current3",
-            r"Z:\Manga\Manga_1\Current",
-            r"Z:\Manga\Manga_1\Current Axe4",
-            r"Z:\Manga\Manga_1\Current Old5",
-            r"Z:\Manga\Manga_A2\Axe",
-            r"Z:\Manga\Manga_A2\Completed",
-            r"Z:\Manga\Manga_A2\Completed Current3",
-            r"Z:\Manga\Manga_A2\Current",
-            r"Z:\Manga\Manga_A2\Current Axe4",
-            r"Z:\Manga\Manga_A2\Current Old5"
-        ]
+    target_directories = resolve_paths([
+        r"Z:\Manga\Manga_1\Axe",
+        r"Z:\Manga\Manga_1\Completed",
+        r"Z:\Manga\Manga_1\Completed Current3",
+        r"Z:\Manga\Manga_1\Current",
+        r"Z:\Manga\Manga_1\Current Axe4",
+        r"Z:\Manga\Manga_1\Current Old5",
+        r"Z:\Manga\Manga_A2\Axe",
+        r"Z:\Manga\Manga_A2\Completed",
+        r"Z:\Manga\Manga_A2\Completed Current3",
+        r"Z:\Manga\Manga_A2\Current",
+        r"Z:\Manga\Manga_A2\Current Axe4",
+        r"Z:\Manga\Manga_A2\Current Old5"
+    ])
     
-    # Set dry_run to True to safely test. Set to False to actually modify the files.
+    report_file = str(get_reports_dir() / "normalization_report.txt")
+    is_dry = is_dry_run_requested(default=True)
+
     normalize_series_names(
         target_directories, 
-        report_filename="normalization_report.txt", 
-        dry_run=False  
+        report_filename=report_file, 
+        dry_run=is_dry
     )

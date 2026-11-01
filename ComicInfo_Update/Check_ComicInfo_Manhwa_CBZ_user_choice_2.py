@@ -1,15 +1,23 @@
+import os
+import sys
 import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 from datetime import datetime
 import zipfile
-import os
 
-def normalize_series_names(base_directories, report_filename="normalization_report.txt", dry_run=True):
+# Ensure shared configuration is available
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
+from shared.config import resolve_paths, get_reports_dir, is_dry_run_requested, should_auto_confirm
+
+def normalize_series_names(base_directories, report_filename="normalization_report_manhwa.txt", dry_run=True):
     """
     Scans manga library directories for .cbz files, finds discrepancies in the <Series> 
-    tag in their ComicInfo.xml, prompts the user to select the correct name, and generates 
-    a text report. Can be run in a 'dry run' mode to preview changes without modifying files.
+    tag in their ComicInfo.xml, prompts the user to select the correct name (or auto-selects in automated mode),
+    and generates a text report. Can be run in a 'dry run' mode to preview changes without modifying files.
     """
     
     # Register namespaces commonly found in Mihon/Tachiyomi metadata
@@ -86,7 +94,7 @@ def normalize_series_names(base_directories, report_filename="normalization_repo
                 print(f"[{series_folder.name}] All {len(cbz_files)} scanned files already match.")
                 continue
 
-            # INTERACTIVE PROMPT
+            # Check discrepancies
             print(f"\n[{series_folder.name}] Conflict found! Multiple Series names detected:")
             for i, name in enumerate(unique_names, 1):
                 print(f"  {i}. {name} (Count: {name_counts[name]})")
@@ -98,25 +106,33 @@ def normalize_series_names(base_directories, report_filename="normalization_repo
             print(f"  {skip_option_idx}. [Skip this folder]")
 
             target_series = None
-            while True:
-                try:
-                    choice = int(input("Enter your choice: "))
-                    if 1 <= choice <= len(unique_names):
-                        target_series = unique_names[choice - 1]
-                        break
-                    elif choice == custom_option_idx:
-                        target_series = input("Enter the custom series name: ").strip()
-                        if target_series:  # Ensure it's not empty
+            if should_auto_confirm():
+                target_series = unique_names[0]
+                print(f"[AUTO-SELECT] Non-interactive mode: Auto-selected #1 '{target_series}'")
+            else:
+                while True:
+                    try:
+                        choice = int(input("Enter your choice: "))
+                        if 1 <= choice <= len(unique_names):
+                            target_series = unique_names[choice - 1]
+                            break
+                        elif choice == custom_option_idx:
+                            target_series = input("Enter the custom series name: ").strip()
+                            if target_series:
+                                break
+                            else:
+                                print("Custom name cannot be empty. Try again.")
+                        elif choice == skip_option_idx:
+                            target_series = None
                             break
                         else:
-                            print("Custom name cannot be empty. Try again.")
-                    elif choice == skip_option_idx:
-                        target_series = None
+                            print("Invalid choice. Try again.")
+                    except ValueError:
+                        print("Please enter a valid number.")
+                    except EOFError:
+                        target_series = unique_names[0]
+                        print(f"[EOF] Defaulting to #1 '{target_series}'")
                         break
-                    else:
-                        print("Invalid choice. Try again.")
-                except ValueError:
-                    print("Please enter a valid number.")
 
             if target_series is None:
                 print("Skipping folder...\n")
@@ -128,47 +144,34 @@ def normalize_series_names(base_directories, report_filename="normalization_repo
             
             for cbz_file, root, series_elem, current_name in parsed_data:
                 if current_name != target_series:
-                    
-                    # Only apply and save the changes if we are NOT in a dry run
                     if not dry_run:
                         series_elem.text = target_series
-                        
-                        # Generate bytes for the updated XML
                         xml_bytes = ET.tostring(root, encoding="UTF-8", xml_declaration=True)
-                        
                         temp_cbz = cbz_file.with_name(cbz_file.name + '.tmp')
                         
                         try:
-                            # Rebuild the CBZ file with the modified XML
                             with zipfile.ZipFile(cbz_file, 'r') as zin:
-                                with zipfile.ZipFile(temp_cbz, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+                                with zipfile.ZipFile(temp_cbz, 'w') as zout:
                                     for item in zin.infolist():
                                         if item.filename == "ComicInfo.xml":
-                                            # Write our updated XML instead of the original
                                             zout.writestr(item, xml_bytes)
                                         else:
-                                            # Copy over all other original files (images, etc.)
                                             zout.writestr(item, zin.read(item.filename))
                             
-                            # Replace the old CBZ with the newly built one
-                            os.replace(temp_cbz, cbz_file)
-                            
+                            temp_cbz.replace(cbz_file)
                         except Exception as e:
-                            print(f"Error updating CBZ {cbz_file}: {e}")
-                            # Clean up temp file if something went wrong during rebuild
+                            print(f"Failed to update {cbz_file}: {e}")
                             if temp_cbz.exists():
                                 temp_cbz.unlink()
                             continue
                     
-                    # Log the specific change (adjusting wording based on mode)
                     action_word = "Would change" if dry_run else "Changed"
-                    folder_report_lines.append(f"  - {cbz_file.name} in '{cbz_file.parent.name}'")
+                    folder_report_lines.append(f"  - {cbz_file.name}")
                     folder_report_lines.append(f"    {action_word} from: '{current_name}' -> '{target_series}'")
                     
                     folder_updates += 1
                     total_files_changed += 1
             
-            # If changes were identified in this series folder, add them to the main report
             if folder_updates > 0:
                 report_lines.append(f"[{series_folder.name}]")
                 report_lines.append(f"Target Series Name: '{target_series}'")
@@ -193,8 +196,7 @@ def normalize_series_names(base_directories, report_filename="normalization_repo
         print("\n✅ Processing complete. No files needed updating, so no report was generated.")
 
 if __name__ == "__main__":
-    # Define your list of target directories here
-    target_directories = [
+    target_directories = resolve_paths([
         r"Z:\Manga\Manhwa_CBZ_1\Completed Current3",
         r"Z:\Manga\Manhwa_CBZ_1\Current",
         r"Z:\Manga\Manhwa_CBZ_1\Current Axe4",
@@ -206,11 +208,13 @@ if __name__ == "__main__":
         r"Z:\Manga\Manhwa_CBZ_H3\Completed",
         r"Z:\Manga\Manhwa_CBZ_H3\Current U",
         r"Z:\Manga\Manhwa_CBZ_H3\Current Standard"
-    ]
+    ])
     
-    # Set dry_run to True to safely test. Set to False to actually modify the files.
+    report_file = str(get_reports_dir() / "normalization_report_manhwa.txt")
+    is_dry = is_dry_run_requested(default=True)
+
     normalize_series_names(
         target_directories, 
-        report_filename="normalization_report_2.txt", 
-        dry_run=False  
+        report_filename=report_file, 
+        dry_run=is_dry
     )

@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import concurrent.futures
 from datetime import datetime
@@ -7,10 +8,17 @@ import pandas as pd
 import xxhash
 import pickle
 
+# Ensure shared configuration is available
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
+from shared.config import resolve_path, get_reports_dir, get_cache_dir
+
 # --- Configuration ---
-MAPPED_DRIVE_PATH = r"Z:\Backup2\Vere\NewFolder"  # Update to your mapped drive
-EXCEL_OUTPUT = "manga_comparison_report.xlsx"
-CACHE_FILE = "manga_hash_cache.pkl" # Local file to store the hashes
+MAPPED_DRIVE_PATH = resolve_path(r"Z:\Backup2\Vere\NewFolder")
+EXCEL_OUTPUT = str(get_reports_dir() / "manga_comparison_report.xlsx")
+CACHE_FILE = str(get_cache_dir() / "manga_hash_cache.pkl")
 
 # Image extensions to look for
 VALID_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif'}
@@ -83,11 +91,13 @@ def main():
             print(f"Error loading cache (corrupted?). Starting fresh. Error: {e}")
 
     print(f"Scanning directory tree at {MAPPED_DRIVE_PATH} to find leaf folders...")
+    if not os.path.exists(MAPPED_DRIVE_PATH):
+        print(f"Error: Path {MAPPED_DRIVE_PATH} does not exist or is not mounted.")
+        return
+
     leaf_folders = {}
-    
     for root, dirs, files in os.walk(MAPPED_DRIVE_PATH):
         if not dirs and files:
-            # Grab the Last Modified Time of the folder
             leaf_folders[root] = os.stat(root).st_mtime
 
     print(f"Found {len(leaf_folders)} leaf folders.")
@@ -101,7 +111,6 @@ def main():
     print("Checking cache validity...")
     for folder, mtime in leaf_folders.items():
         if folder in cache and cache[folder]['mtime'] == mtime:
-            # Cache is valid! Use it.
             folder_data[folder] = cache[folder]['hashes']
             analysis_stats.append({
                 "Folder Path": folder,
@@ -111,20 +120,19 @@ def main():
                 "Status": "Loaded from Cache"
             })
         else:
-            # Needs hashing (New folder OR folder was modified)
             folders_to_hash.append(folder)
 
     # --- 3. Process Only Uncached/Modified Folders ---
     if folders_to_hash:
         print(f"Hashing {len(folders_to_hash)} new or modified folders...")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+        workers = min(16, max(1, os.cpu_count() or 4))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {executor.submit(analyze_leaf_folder, folder): folder for folder in folders_to_hash}
             
             for future in concurrent.futures.as_completed(futures):
                 folder_path, hashes, time_taken = future.result()
                 if hashes:
                     folder_data[folder_path] = hashes
-                    # Update cache dictionary
                     cache[folder_path] = {
                         'hashes': hashes,
                         'mtime': leaf_folders[folder_path]
@@ -146,10 +154,12 @@ def main():
     for stale in stale_folders:
         del cache[stale]
     
-    # Save the updated cache to disk
     print(f"Saving updated cache to {CACHE_FILE}...")
-    with open(CACHE_FILE, 'wb') as f:
-        pickle.dump(cache, f)
+    try:
+        with open(CACHE_FILE, 'wb') as f:
+            pickle.dump(cache, f)
+    except Exception as e:
+        print(f"Warning: Failed to save cache: {e}")
 
     # --- 5. Comparison Logic ---
     print("\nBuilding inverted index for fast comparison...")
@@ -182,17 +192,20 @@ def main():
 
     # --- 6. Write to Excel ---
     print("\nWriting reports to Excel...")
-    with pd.ExcelWriter(EXCEL_OUTPUT, engine='openpyxl') as writer:
-        if comparison_results:
-            df_results = pd.DataFrame(comparison_results)
-            df_results.to_excel(writer, sheet_name='Matches & Subsets', index=False)
-        else:
-            pd.DataFrame({"Message": ["No matches or subsets found."]}).to_excel(writer, sheet_name='Matches & Subsets', index=False)
+    try:
+        with pd.ExcelWriter(EXCEL_OUTPUT, engine='openpyxl') as writer:
+            if comparison_results:
+                df_results = pd.DataFrame(comparison_results)
+                df_results.to_excel(writer, sheet_name='Matches & Subsets', index=False)
+            else:
+                pd.DataFrame({"Message": ["No matches or subsets found."]}).to_excel(writer, sheet_name='Matches & Subsets', index=False)
+                
+            df_stats = pd.DataFrame(analysis_stats)
+            df_stats.to_excel(writer, sheet_name='Leaf Analysis Stats', index=False)
             
-        df_stats = pd.DataFrame(analysis_stats)
-        df_stats.to_excel(writer, sheet_name='Leaf Analysis Stats', index=False)
-        
-    print(f"Done! Report saved to {EXCEL_OUTPUT}")
+        print(f"Done! Report saved to {EXCEL_OUTPUT}")
+    except Exception as e:
+        print(f"Error writing Excel output: {e}")
 
 if __name__ == "__main__":
     main()

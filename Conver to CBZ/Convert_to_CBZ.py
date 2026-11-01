@@ -1,16 +1,26 @@
 import os
+import sys
 import zipfile
 import time
 import tempfile
 import shutil
 
-def convert_leaf_folders_to_cbz(target_paths):
+# Ensure shared configuration is available
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
+from shared.config import resolve_paths, is_dry_run_requested, prompt_confirmation
+
+def convert_leaf_folders_to_cbz(target_paths, dry_run=False):
     # Supported image extensions
     image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'}
     
+    mode_text = "DRY RUN (Preview only)" if dry_run else "LIVE RUN (Files created and folders deleted)"
+    print(f"Starting conversion in {mode_text} mode...\n")
+
     # Iterate through the provided list of paths
     for base_path in target_paths:
-        # Standardize path slashes
         base_path = os.path.normpath(base_path)
         
         if not os.path.exists(base_path):
@@ -31,13 +41,16 @@ def convert_leaf_folders_to_cbz(target_paths):
                     folder_name = os.path.basename(root)
                     parent_dir = os.path.dirname(root)
                     
-                    # Define the output path for the CBZ file
                     cbz_filename = f"{folder_name}.cbz"
                     final_cbz_path = os.path.join(parent_dir, cbz_filename)
                     
                     # Check if archive already exists
                     if os.path.exists(final_cbz_path):
                         print(f"Skipping (CBZ already exists): {final_cbz_path}")
+                        continue
+
+                    if dry_run:
+                        print(f"[DRY RUN] Would archive '{root}' ({len(files)} images) -> '{final_cbz_path}' and delete source folder.")
                         continue
 
                     print(f"Archiving: '{root}'...")
@@ -54,17 +67,14 @@ def convert_leaf_folders_to_cbz(target_paths):
                         with zipfile.ZipFile(local_temp_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
                             for file in files:
                                 source_file_path = os.path.join(root, file)
-                                # Write the file to the archive, using just the filename as the archive path
                                 zipf.write(source_file_path, arcname=file)
                         
-                        # Calculate exactly how big the file should be
                         local_zip_size = os.path.getsize(local_temp_zip)
                         
                         # 2. Copy the completed zip to the final mapped drive location
                         shutil.copy2(local_temp_zip, final_cbz_path)
                         
                         # 3. STRICT VERIFICATION
-                        # Ask the OS for the exact size of the newly placed file
                         final_zip_size = os.path.getsize(final_cbz_path)
                         
                         if final_zip_size == local_zip_size and local_zip_size > 0:
@@ -77,7 +87,6 @@ def convert_leaf_folders_to_cbz(target_paths):
                         print(f"  -> Error during creation/transfer: {e}")
                         
                     finally:
-                        # If verification failed or an error occurred, attempt to clean up the broken final file
                         if not success:
                             try:
                                 if os.path.exists(final_cbz_path):
@@ -86,7 +95,6 @@ def convert_leaf_folders_to_cbz(target_paths):
                             except Exception:
                                 pass
                                 
-                        # Always clean up the local temp file
                         if os.path.exists(local_temp_zip):
                             os.remove(local_temp_zip)
 
@@ -105,23 +113,26 @@ def convert_leaf_folders_to_cbz(target_paths):
 
 
 if __name__ == "__main__":
-    
-    # --- Target Paths mapped to Z: ---
-    # Adjust this path based on exactly how deep you mapped the Z: drive.
-    library_paths = [
+    library_paths = resolve_paths([
         r"Z:\Manga CBZ\Manga"
-    ]
+    ])
     
-    print("WARNING: This script verifies .cbz creations by byte-size, and DELETES original folders.")
-    confirm = input("Proceed? (y/n): ")
+    is_dry = is_dry_run_requested(default=True)
     
-    if confirm.lower() == 'y':
+    if is_dry:
+        print("\n--- DRY RUN INITIATED: No files will be modified or deleted ---")
         total_start_time = time.time()
-        
-        convert_leaf_folders_to_cbz(library_paths)
-        
-        total_end_time = time.time()
-        total_duration = total_end_time - total_start_time
-        print(f"\nFinished processing all paths in {total_duration:.2f} seconds.")
+        convert_leaf_folders_to_cbz(library_paths, dry_run=True)
+        total_duration = time.time() - total_start_time
+        print(f"\nFinished scanning all paths in {total_duration:.2f} seconds.")
     else:
-        print("\nOperation cancelled.")
+        print("WARNING: This script verifies .cbz creations by byte-size, and DELETES original folders.")
+        confirm = prompt_confirmation("Proceed? (y/n): ")
+        
+        if confirm:
+            total_start_time = time.time()
+            convert_leaf_folders_to_cbz(library_paths, dry_run=False)
+            total_duration = time.time() - total_start_time
+            print(f"\nFinished processing all paths in {total_duration:.2f} seconds.")
+        else:
+            print("\nOperation cancelled.")

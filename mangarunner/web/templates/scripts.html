@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Scripts Catalog{% endblock %}
+{% block header_title %}Python Scripts Catalog{% endblock %}
+
+{% block header_actions %}
+  <button class="btn btn-secondary" onclick="enqueueAllScripts(true)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+    Queue All (Dry Run)
+  </button>
+  <button class="btn btn-primary" onclick="enqueueAllScripts(false)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <polygon points="5 3 19 12 5 21 5 3"/>
+    </svg>
+    Queue All (Live)
+  </button>
+{% endblock %}
+
+{% block content %}
+<p style="color: var(--text-secondary); margin-bottom: 24px; font-size: 0.95rem;">
+  Browse and trigger your Manga library automations. Clicking <strong>Run Now</strong> or <strong>Add to Queue</strong> will prompt you with a confirmation modal to choose between <strong>Dry Run</strong> or <strong>Live Run</strong>. All jobs run sequentially in a single FIFO queue.
+</p>
+
+{% for cat_name, scripts in categories.items() %}
+  <section class="scripts-category-section">
+    <div class="category-header">
+      <div class="category-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+        {{ cat_name }}
+        <span class="badge badge-secondary" style="font-size: 0.75rem;">{{ scripts | length }} scripts</span>
+      </div>
+    </div>
+
+    <div class="scripts-grid">
+      {% for script in scripts %}
+        <div class="script-card">
+          <div>
+            <div class="script-card-header">
+              <div class="script-title">{{ script.name }}</div>
+              {% if script.is_report_only %}
+                <span class="badge badge-completed" style="font-size: 0.7rem; flex-shrink: 0;">Report Only</span>
+              {% elif script.supports_dry_run %}
+                <span class="badge badge-warning" style="font-size: 0.7rem; flex-shrink: 0;">Dry Run Ready</span>
+              {% endif %}
+            </div>
+
+            <div class="script-desc">{{ script.description }}</div>
+
+            <div class="script-tags">
+              <span class="script-tag" style="font-family: var(--font-mono); color: #94a3b8;">{{ script.file_path }}</span>
+              {% for tag in script.tags %}
+                <span class="script-tag">{{ tag }}</span>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="script-card-actions">
+            <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="openDryRunModal('{{ script.id }}', '{{ script.name }}', '{{ script.category }}', {{ 'true' if script.supports_dry_run else 'false' }})">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Add to Queue
+            </button>
+            <button class="btn btn-primary btn-sm" style="flex: 1;" onclick="openDryRunModal('{{ script.id }}', '{{ script.name }}', '{{ script.category }}', {{ 'true' if script.supports_dry_run else 'false' }})">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              Run Now
+            </button>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{% endfor %}
+{% endblock %}
+

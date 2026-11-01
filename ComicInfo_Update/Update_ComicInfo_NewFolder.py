@@ -1,4 +1,5 @@
 import os
+import sys
 import zipfile
 import tempfile
 import shutil
@@ -6,6 +7,13 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# Ensure shared configuration is available
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
+from shared.config import resolve_path, get_reports_dir, is_dry_run_requested, should_auto_confirm
 
 # Register namespaces so ElementTree doesn't overwrite them with "ns0", "ns1", etc.
 ET.register_namespace('xsd', "http://www.w3.org/2001/XMLSchema")
@@ -18,7 +26,6 @@ def process_comicinfo(args):
     Checks and updates the ComicInfo.xml inside a CBZ archive.
     Returns a tuple: (log_string, console_message)
     """
-    # Unpack arguments
     file_path, folder_name, cbz_count, dry_run = args
     filename_no_ext = os.path.splitext(os.path.basename(file_path))[0]
     
@@ -53,7 +60,6 @@ def process_comicinfo(args):
     current_title = title_elem.text if title_elem.text else ""
     current_series = series_elem.text if series_elem.text else ""
 
-    # Set default targets to current values
     target_title = current_title
     target_series = current_series
 
@@ -89,7 +95,6 @@ def process_comicinfo(args):
             except Exception as e:
                 return None, f"[-] Failed to write {os.path.basename(file_path)}: {e}"
         
-        # Create a detailed log string for the report (Re-formatted for clarity)
         log_entry = (
             f"Path:       {file_path}\n"
             f"Old Title:  {current_title if current_title else '<None>'}\n"
@@ -132,7 +137,7 @@ def scan_directory_parallel(base_dir, dry_run=False):
     Filters out duplicate files reported by network/virtual drives.
     """
     tasks = []
-    seen_paths = set() # Memory bank to stop duplicates
+    seen_paths = set()
     
     print("Scanning folders to build task list...")
     for root_dir, _, files in os.walk(base_dir):
@@ -144,11 +149,7 @@ def scan_directory_parallel(base_dir, dry_run=False):
         folder_name = os.path.basename(root_dir)
         
         for cbz in cbz_files:
-            # Get the absolute path to ensure accurate deduplication
             full_path = os.path.abspath(os.path.join(root_dir, cbz))
-            
-            # --- DEDUPLICATOR ---
-            # If the OS stutters and gives us the exact same file twice, ignore it.
             if full_path in seen_paths:
                 continue
                 
@@ -160,7 +161,6 @@ def scan_directory_parallel(base_dir, dry_run=False):
 
     update_logs = []
     processed_count = 0
-    
     max_threads = max(1, multiprocessing.cpu_count() - 2)
 
     with ProcessPoolExecutor(max_workers=max_threads) as executor:
@@ -189,12 +189,15 @@ if __name__ == "__main__":
     
     print("=== CBZ ComicInfo MULTI-CORE Auto-Formatter ===")
     
-    target_directory = r"Z:\Manga CBZ\Doujinshi\NewFolder"
+    target_directory = resolve_path(r"Z:\Manga CBZ\Doujinshi\NewFolder")
     print(f"Target Directory set to: {target_directory}\n")
         
     if os.path.isdir(target_directory):
-        user_input = input("Enable Dry Run mode? (Type 'y' to generate a report ONLY, or 'n' to apply changes): ").strip().lower()
-        is_dry_run = user_input == 'y' or user_input == 'yes'
+        if "--dry-run" in sys.argv or "--live" in sys.argv or "DRY_RUN" in os.environ or should_auto_confirm():
+            is_dry_run = is_dry_run_requested(default=True)
+        else:
+            user_input = input("Enable Dry Run mode? (Type 'y' to generate a report ONLY, or 'n' to apply changes): ").strip().lower()
+            is_dry_run = user_input in ('y', 'yes')
         
         if is_dry_run:
             print("\n--- DRY RUN INITIATED: No files will be modified ---")
@@ -207,8 +210,7 @@ if __name__ == "__main__":
         
         if logs:
             report_name = "cbz_dry_run_report.txt" if is_dry_run else "cbz_update_report.txt"
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            report_path = os.path.join(script_dir, report_name)
+            report_path = str(get_reports_dir() / report_name)
             
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             

@@ -1,8 +1,19 @@
 import os
+import sys
 import subprocess
 from pathlib import Path
 
+# Ensure shared configuration is available
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
+from shared.config import resolve_path, resolve_paths, get_reports_dir
+
 def authenticate_smb(share_path, username, password):
+    if os.name != "nt":
+        # Network shares are mounted locally on Linux / Docker
+        return
     print(f"Authenticating with network share {share_path}...")
     cmd = f'net use "{share_path}" "{password}" /user:"{username}"'
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
@@ -83,16 +94,15 @@ def generate_missing_manga_report(source_dirs, dest_dir, report_file_path):
         print(f"Report successfully saved to: {report_file_path}")
 
 if __name__ == "__main__":
-
-    # Define a list of source directories to scan
-    SOURCE_DIRECTORIES = [
+    # Define a list of source directories to scan (auto-mapped for Linux/Windows)
+    SOURCE_DIRECTORIES = resolve_paths([
         r"Z:\Backup2\Vere\Mihon\downloads",
         r"Z:\Backup3\Mihon\downloads"
-    ]
+    ])
     
-    DESTINATION_DIRECTORY = r"Z:\Manga"
+    DESTINATION_DIRECTORY = resolve_path(r"Z:\Manga")
     
     # --- REPORT PATH ---
-    REPORT_FILE = "missing_manga_report.txt"
+    REPORT_FILE = str(get_reports_dir() / "missing_manga_report.txt")
 
     generate_missing_manga_report(SOURCE_DIRECTORIES, DESTINATION_DIRECTORY, REPORT_FILE)

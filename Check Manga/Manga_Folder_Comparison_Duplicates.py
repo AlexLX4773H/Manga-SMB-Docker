@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from datetime import datetime
 from itertools import combinations
@@ -8,10 +9,17 @@ import pandas as pd
 from PIL import Image
 import imagehash
 
+# Ensure shared configuration is available
+_PARENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
+from shared.config import resolve_paths, get_reports_dir
+
 # ==========================================
 # Configuration
 # ==========================================
-TARGET_PATHS = [
+TARGET_PATHS = resolve_paths([
     r"Z:\Manga\Manga_1\Axe",
     r"Z:\Manga\Manga_1\Completed",
     r"Z:\Manga\Manga_1\Completed Current3",
@@ -24,10 +32,10 @@ TARGET_PATHS = [
     r"Z:\Manga\Manga_A2\Current",
     r"Z:\Manga\Manga_A2\Current Axe4",
     r"Z:\Manga\Manga_A2\Current Old5"
-]
+])
 
-EXCEL_OUTPUT_NAME = "Master_Manga_Duplicate_Report.xlsx"
-NUM_WORKERS = 16  # Tailored for your 16-thread processor
+EXCEL_OUTPUT_NAME = str(get_reports_dir() / "Master_Manga_Duplicate_Report.xlsx")
+NUM_WORKERS = min(16, max(1, os.cpu_count() or 4))
 
 # ==========================================
 
@@ -53,7 +61,7 @@ def get_image_hashes_parallel(folder_path, executor):
         print(f"Permission denied to read: {folder_path}")
         return None
     except FileNotFoundError:
-        print(f"Path not found (check Z: drive connection): {folder_path}")
+        print(f"Path not found (check connection/mount): {folder_path}")
         return None
 
     if not filepaths:
@@ -79,8 +87,6 @@ def compare_hash_matrices(series_name, name_a, matrix_a, name_b, matrix_b, root_
     len_b = len(matrix_b)
     
     # Fast Hamming distance calculation via matrix broadcasting:
-    # matrix_a[:, None, :] creates an axis to compare every element of A to every element of B.
-    # .sum(axis=2) calculates the bitwise differences (Hamming distance) across the flat image hashes.
     hamming_distances = (matrix_a[:, None, :] != matrix_b[None, :, :]).sum(axis=2)
 
     # For each image in A, find if there is ANY match in B within tolerance bounds
@@ -133,10 +139,10 @@ def scan_library(root_dir, executor):
             manga_groups.setdefault(parent_dir, []).append(dirpath)
 
     if not manga_groups:
-        print("No image folders found in this location.")
+        print(f"No image folders found in location: {root_dir}")
         return report_data
 
-    print(f"Found {len(manga_groups)} series folders containing chapters to check.\n")
+    print(f"Found {len(manga_groups)} series folders containing chapters to check in {root_dir}.\n")
 
     for series_path, chapter_folders in manga_groups.items():
         if len(chapter_folders) < 2:
@@ -179,8 +185,6 @@ if __name__ == "__main__":
     all_report_data = []
     total_start_time = time.time()
 
-    # Using ProcessPoolExecutor to bypass Python's Global Interpreter Lock (GIL)
-    # This allows genuine utilize of your 16 CPU cores.
     with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
         for path in TARGET_PATHS:
             print(f"\n{'='*60}")

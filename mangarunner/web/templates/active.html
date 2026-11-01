@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Active Run &amp; Queue{% endblock %}
+{% block header_title %}Queue &amp; Live Terminal{% endblock %}
+
+{% block header_actions %}
+  <button class="btn btn-danger" id="btn-cancel-active" onclick="cancelActiveJob()" style="display: {{ 'inline-flex' if queue_status.is_running else 'none' }};">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="15" y1="9" x2="9" y2="15"/>
+      <line x1="9" y1="9" x2="15" y2="15"/>
+    </svg>
+    Cancel Active Job
+  </button>
+{% endblock %}
+
+{% block content %}
+<!-- Active Job Monitor Card -->
+<div class="card" style="margin-bottom: 24px;">
+  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+    <div>
+      <span class="badge {{ 'badge-warning' if queue_status.active_run and queue_status.active_run.dry_run else ('badge-primary' if queue_status.is_running else 'badge-secondary') }}" id="active-job-badge">
+        {% if queue_status.is_running and queue_status.active_run %}
+          {{ 'DRY RUN ACTIVE' if queue_status.active_run.dry_run else 'LIVE RUN ACTIVE' }}
+        {% else %}
+          IDLE
+        {% endif %}
+      </span>
+      <h2 style="font-size: 1.35rem; font-weight: 700; color: #fff; margin-top: 8px;" id="active-job-title">
+        {{ queue_status.active_run.script_name if queue_status.active_run else 'No Job Currently Running' }}
+      </h2>
+      <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;" id="active-job-category">
+        {{ queue_status.active_run.category if queue_status.active_run else 'Queue engine is standing by' }}
+      </div>
+    </div>
+
+    <div style="text-align: right;">
+      <div style="font-size: 0.8rem; color: var(--text-secondary);">Single-Worker Queue</div>
+      <div style="font-size: 1.1rem; font-weight: 700; color: var(--accent-primary); margin-top: 2px;">
+        <span id="queue-count-display">{{ queue_status.queued_runs | length }}</span> Job(s) Pending
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Live Activity Terminal Box -->
+<div class="card" style="margin-bottom: 24px;">
+  <div class="card-header">
+    <h3 class="card-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="4 17 10 11 4 5"/>
+        <line x1="12" y1="19" x2="20" y2="19"/>
+      </svg>
+      Live Activity Terminal
+    </h3>
+    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('live-terminal').innerHTML = ''">
+      Clear Terminal
+    </button>
+  </div>
+  <div class="terminal-box" id="live-terminal" style="min-height: 280px; max-height: 500px;">
+    <div class="log-entry" style="color: var(--text-muted);">
+      [System] Connected to real-time process event stream. Output from running Python scripts will appear below.
+    </div>
+  </div>
+</div>
+
+<!-- Sequential Queue List Card -->
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="8" y1="6" x2="21" y2="6"/>
+        <line x1="8" y1="12" x2="21" y2="12"/>
+        <line x1="8" y1="18" x2="21" y2="18"/>
+        <line x1="3" y1="6" x2="3.01" y2="6"/>
+        <line x1="3" y1="12" x2="3.01" y2="12"/>
+        <line x1="3" y1="18" x2="3.01" y2="18"/>
+      </svg>
+      Up Next in Sequential Queue
+    </h3>
+    <div style="display: flex; gap: 8px;">
+      <a href="/scripts" class="btn btn-secondary btn-sm">+ Add Script</a>
+      <button class="btn btn-danger btn-sm" onclick="clearQueue()">Clear Queue</button>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width: 48px;">#</th>
+          <th>Script &amp; Category</th>
+          <th>Execution Mode</th>
+          <th>Enqueued Time</th>
+          <th style="text-align: right;">Queue Actions</th>
+        </tr>
+      </thead>
+      <tbody id="queue-table-body">
+        {% if queue_status.queued_runs %}
+          {% for q in queue_status.queued_runs %}
+            <tr class="queue-row">
+              <td style="font-weight: 700; color: var(--accent-primary);">#{{ loop.index }}</td>
+              <td>
+                <div style="font-weight: 600; color: #fff;">{{ q.script_name }}</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">{{ q.category }}</div>
+              </td>
+              <td>
+                <span class="badge {{ 'badge-warning' if q.dry_run else 'badge-primary' }}">
+                  {{ 'Dry Run' if q.dry_run else 'Live' }}
+                </span>
+              </td>
+              <td style="font-size: 0.85rem; color: var(--text-secondary);">{{ q.enqueued_at.replace('T', ' ')[:19] }}</td>
+              <td style="text-align: right;">
+                <div style="display: inline-flex; gap: 4px;">
+                  <button class="btn btn-secondary btn-sm" onclick="reorderQueue('{{ q.run_id }}', 'up')" title="Move Up" {{ 'disabled' if loop.first else '' }}>↑</button>
+                  <button class="btn btn-secondary btn-sm" onclick="reorderQueue('{{ q.run_id }}', 'down')" title="Move Down" {{ 'disabled' if loop.last else '' }}>↓</button>
+                  <button class="btn btn-danger btn-sm" onclick="removeFromQueue('{{ q.run_id }}')" title="Remove">&times;</button>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">
+              Queue is empty. Select scripts from the Scripts catalog to add to the queue.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+

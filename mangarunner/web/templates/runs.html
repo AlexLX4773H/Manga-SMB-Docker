@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Run History{% endblock %}
+{% block header_title %}Run History &amp; Audit{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom: 24px;">
+  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 0.9rem; color: var(--text-secondary);">Filter by status:</span>
+      <select class="input-field" style="width: auto; padding: 6px 12px;" onchange="window.location.href = '/runs?status=' + this.value">
+        <option value="" {{ 'selected' if not filter_status else '' }}>All Statuses</option>
+        <option value="completed" {{ 'selected' if filter_status == 'completed' else '' }}>Completed</option>
+        <option value="failed" {{ 'selected' if filter_status == 'failed' else '' }}>Failed</option>
+        <option value="cancelled" {{ 'selected' if filter_status == 'cancelled' else '' }}>Cancelled</option>
+      </select>
+    </div>
+    <div style="font-size: 0.85rem; color: var(--text-muted);">
+      Total Recorded: {{ total_count }} run(s)
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-container">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Script &amp; Category</th>
+          <th>Status</th>
+          <th>Mode</th>
+          <th>Started</th>
+          <th>Duration</th>
+          <th>Reports</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if runs %}
+          {% for r in runs %}
+            <tr>
+              <td>
+                <div style="font-weight: 600; color: #fff;">{{ r.script_name }}</div>
+                <div style="font-size: 0.78rem; color: var(--text-muted);">{{ r.category }} &bull; <span style="font-family: var(--font-mono);">{{ r.run_id[:8] }}</span></div>
+              </td>
+              <td>
+                <span class="badge badge-{{ r.status }}">{{ r.status }}</span>
+              </td>
+              <td>
+                <span class="badge {{ 'badge-warning' if r.dry_run else 'badge-primary' }}">
+                  {{ 'Dry Run' if r.dry_run else 'Live' }}
+                </span>
+              </td>
+              <td style="font-size: 0.85rem; color: var(--text-secondary);">
+                {{ r.enqueued_at | time_ago }}
+              </td>
+              <td style="font-size: 0.85rem; color: var(--text-secondary);">
+                {{ r.duration_seconds | format_duration }}
+              </td>
+              <td>
+                {% if r.reports %}
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                    {% for rep in r.reports %}
+                      <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.75rem;" onclick="openReportPreview('{{ rep }}')">
+                        {{ rep }}
+                      </button>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span style="color: var(--text-muted); font-size: 0.8rem;">None</span>
+                {% endif %}
+              </td>
+              <td style="text-align: right;">
+                <div style="display: inline-flex; gap: 6px;">
+                  <button class="btn btn-secondary btn-sm" onclick="openLogModal('{{ r.run_id }}')">
+                    View Log
+                  </button>
+                  <a class="btn btn-secondary btn-sm" href="/runs/{{ r.run_id }}">
+                    Details
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">
+              No run records found matching criteria.
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_pages > 1 %}
+    <div style="display: flex; justify-content: center; gap: 8px; padding-top: 20px; border-top: 1px solid var(--border-subtle); margin-top: 16px;">
+      {% if current_page > 1 %}
+        <a href="/runs?page={{ current_page - 1 }}&status={{ filter_status }}" class="btn btn-secondary btn-sm">&larr; Previous</a>
+      {% endif %}
+      <span style="display: flex; align-items: center; font-size: 0.85rem; color: var(--text-secondary); padding: 0 8px;">
+        Page {{ current_page }} of {{ total_pages }}
+      </span>
+      {% if current_page < total_pages %}
+        <a href="/runs?page={{ current_page + 1 }}&status={{ filter_status }}" class="btn btn-secondary btn-sm">Next &rarr;</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
+

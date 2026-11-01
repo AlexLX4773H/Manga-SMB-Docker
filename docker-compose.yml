@@ -1,0 +1,64 @@
+name: manga-suite
+
+services:
+  manga-suite:
+    build: .
+    container_name: manga-suite
+    restart: unless-stopped
+    ports:
+      - "7070:7070"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MANGA_ROOT=/sg2b/Share2sgb
+      - DATA_DIR=/app/data
+      - REPORTS_DIR=/app/data/reports
+      - LOGS_DIR=/app/data/logs
+      - DATABASE_PATH=/app/data/mangarunner.db
+      - PORT=7070
+      - HOST=0.0.0.0
+    volumes:
+      # Persistent app data (stores mangarunner.db, generated reports, logs & caches)
+      - /DATA/AppData/manga-suite:/app/data
+
+      # Server Manga SMB mount path (Ubuntu Server location corresponding to Z:\ on Windows)
+      - /sg2b/Share2sgb:/sg2b/Share2sgb:rw
+
+      # Storage & Disks on Ubuntu / CasaOS for external USB or custom drive mounts
+      - /media:/media:rw
+      - /mnt:/mnt:rw
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: manga-suite
+  author: Alex
+  category: Utilities
+  developer: Alex
+  title:
+    en_US: Manga SMB Suite
+  tagline:
+    en_US: Manga library automation, sequential FIFO queue, live logs & report center
+  description:
+    en_US: |
+      Self-hosted automation dashboard for Manga library management, CBZ archiving, duplicate comparison, and ComicInfo normalization.
+      
+      Features:
+      • Web UI accessible from desktop and mobile CasaOS dashboard
+      • Sequential FIFO Queue: Run jobs 1 after the other safely
+      • Dry-Run Mode Modal: Choose Dry Run preview or Live Run on demand
+      • Real-time Live Terminal: Stream stdout and stderr logs via SSE
+      • Path Translation: Automatically maps Windows Z:\ to /sg2b/Share2sgb/ on Linux
+      • Reports Center: Instant inline preview for Excel (.xlsx) and Text reports + 1-click downloads
+  icon: https://raw.githubusercontent.com/AlexLX4773H/SyncToHDD/master/assets/icon.png
+  thumbnail: https://raw.githubusercontent.com/AlexLX4773H/SyncToHDD/master/assets/icon.png
+  port_map: "7070"
+  port: 7070
+  scheme: http
+  index: /
+  tips:
+    before_install:
+      en_US: |
+        1. Ensure your server source data exists at /sg2b/Share2sgb (mounted volume).
+        2. Persistent application state and reports will be saved at /DATA/AppData/manga-suite.
+
