@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pkl
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Data and report files
+*.xlsx
+*.csv
+*.txt
+
+# Logs & databases
+*.log
+*.db
+*.sqlite3
+
+# Environment & credentials
+.env
+.env.*
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Reference only folder
+For_Reference_Only/
