@@ -66,13 +66,15 @@ Taking direct inspiration and design cues from **SyncToHDD**, this suite transfo
 3. In the top right corner of the dialog, click **"Import"**.
 4. Copy the entire contents of [`docker-compose.yml`](file:///docker-compose.yml) from this repository and paste it into the import box, then click **Submit**.
 5. CasaOS will automatically populate:
+   - **Docker Image**: `ghcr.io/alexlx4773h/manga-smb-docker`
+   - **Tag**: `latest`
    - **App Name**: `Manga Suite`
-   - **Icon**: Preset icon URL
+   - **Icon**: `https://raw.githubusercontent.com/AlexLX4773H/Manga-SMB-Docker/main/assets/icon.png`
    - **Port**: `7070`
    - **Volumes**:
      - Host `/sg2b/Share2sgb` ➔ Container `/sg2b/Share2sgb`
      - Host `/DATA/AppData/manga-suite` ➔ Container `/app/data`
-6. Click **Install**. CasaOS will pull the base image, build the container, and display the Manga Suite tile on your home screen!
+6. Click **Install**. CasaOS will pull the image, set up the container, and display the Manga Suite tile on your home screen!
 
 ---
 
@@ -81,7 +83,7 @@ Taking direct inspiration and design cues from **SyncToHDD**, this suite transfo
 Clone the repository to your Ubuntu server:
 
 ```bash
-git clone https://github.com/your-username/manga-smb-docker.git /DATA/AppData/manga-suite-repo
+git clone https://github.com/AlexLX4773H/Manga-SMB-Docker.git /DATA/AppData/manga-suite-repo
 cd /DATA/AppData/manga-suite-repo
 ```
 

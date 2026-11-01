@@ -2,6 +2,8 @@ name: manga-suite
 
 services:
   manga-suite:
+    image: ghcr.io/alexlx4773h/manga-smb-docker:latest
+    pull_policy: if_not_present
     build: .
     container_name: manga-suite
     restart: unless-stopped
@@ -24,7 +26,7 @@ services:
       - /sg2b/Share2sgb:/sg2b/Share2sgb:rw
 
       # Storage & Disks on Ubuntu / CasaOS for external USB or custom drive mounts
-      - /media:/media:rw
+      - /DATA/Media:/media:rw
       - /mnt:/mnt:rw
 
 x-casaos:
@@ -34,7 +36,7 @@ x-casaos:
   main: manga-suite
   author: Alex
   category: Utilities
-  developer: Alex
+  developer: AlexLX4773H
   title:
     en_US: Manga SMB Suite
   tagline:
@@ -50,8 +52,8 @@ x-casaos:
       • Real-time Live Terminal: Stream stdout and stderr logs via SSE
       • Path Translation: Automatically maps Windows Z:\ to /sg2b/Share2sgb/ on Linux
       • Reports Center: Instant inline preview for Excel (.xlsx) and Text reports + 1-click downloads
-  icon: https://raw.githubusercontent.com/AlexLX4773H/SyncToHDD/master/assets/icon.png
-  thumbnail: https://raw.githubusercontent.com/AlexLX4773H/SyncToHDD/master/assets/icon.png
+  icon: https://raw.githubusercontent.com/AlexLX4773H/Manga-SMB-Docker/main/assets/icon.png
+  thumbnail: https://raw.githubusercontent.com/AlexLX4773H/Manga-SMB-Docker/main/assets/icon.png
   port_map: "7070"
   port: 7070
   scheme: http
@@ -61,4 +63,3 @@ x-casaos:
       en_US: |
         1. Ensure your server source data exists at /sg2b/Share2sgb (mounted volume).
         2. Persistent application state and reports will be saved at /DATA/AppData/manga-suite.
-
