@@ -13,6 +13,7 @@ env/
 *.xlsx
 *.csv
 *.txt
+!requirements.txt
 
 # Logs & databases
 *.log
