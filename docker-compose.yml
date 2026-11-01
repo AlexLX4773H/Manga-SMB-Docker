@@ -22,12 +22,11 @@ services:
       # Persistent app data (stores mangarunner.db, generated reports, logs & caches)
       - /DATA/AppData/manga-suite:/app/data
 
-      # Server Manga SMB mount path (Ubuntu Server location corresponding to Z:\ on Windows)
+      # Server Manga SMB mount path 
       - /sg2b/Share2sgb:/sg2b/Share2sgb:rw
 
       # Storage & Disks on Ubuntu / CasaOS for external USB or custom drive mounts
       - /DATA/Media:/media:rw
-      - /mnt:/mnt:rw
 
 x-casaos:
   architectures:
@@ -44,7 +43,7 @@ x-casaos:
   description:
     en_US: |
       Self-hosted automation dashboard for Manga library management, CBZ archiving, duplicate comparison, and ComicInfo normalization.
-      
+
       Features:
       • Web UI accessible from desktop and mobile CasaOS dashboard
       • Sequential FIFO Queue: Run jobs 1 after the other safely
