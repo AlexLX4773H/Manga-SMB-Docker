@@ -3,7 +3,7 @@ name: manga-suite
 services:
   manga-suite:
     image: ghcr.io/alexlx4773h/manga-smb-docker:latest
-    pull_policy: if_not_present
+    pull_policy: always
     build: .
     container_name: manga-suite
     restart: unless-stopped
