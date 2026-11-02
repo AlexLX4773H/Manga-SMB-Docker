@@ -179,8 +179,9 @@ def get_registered_scripts() -> Dict[str, ScriptInfo]:
     registry = dict(DEFAULT_SCRIPTS)
     
     # Auto-discover any new .py scripts in category directories
-    ignored_dirs = {"mangarunner", "shared", "For_Reference_Only", ".git", "venv", "__pycache__", "data", "reports"}
+    ignored_dirs = {"mangarunner", "shared", "For_Reference_Only", ".git", "venv", "__pycache__", "data", "reports", "scratch", "tests"}
     for root, dirs, files in os.walk(base_dir):
+        dirs[:] = [d for d in dirs if d not in ignored_dirs and not d.startswith(".")]
         rel_root = os.path.relpath(root, base_dir)
         first_part = rel_root.split(os.sep)[0]
         if first_part in ignored_dirs or rel_root in ignored_dirs or first_part.startswith("."):

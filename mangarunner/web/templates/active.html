@@ -96,29 +96,53 @@
         </tr>
       </thead>
       <tbody id="queue-table-body">
-        {% if queue_status.queued_runs %}
-          {% for q in queue_status.queued_runs %}
-            <tr class="queue-row">
-              <td style="font-weight: 700; color: var(--accent-primary);">#{{ loop.index }}</td>
-              <td>
-                <div style="font-weight: 600; color: #fff;">{{ q.script_name }}</div>
-                <div style="font-size: 0.8rem; color: var(--text-muted);">{{ q.category }}</div>
+        {% set has_active = queue_status.is_running and queue_status.active_run %}
+        {% set has_queued = queue_status.queued_runs and (queue_status.queued_runs | length > 0) %}
+        {% if has_active or has_queued %}
+          {% if has_active %}
+            <tr class="queue-row queue-row-active" style="background: rgba(99, 102, 241, 0.08); border-left: 3px solid var(--accent-primary);">
+              <td style="width: 48px; text-align: center;">
+                <div class="pulse-dot syncing" style="display: inline-block;" title="Currently Executing"></div>
               </td>
               <td>
-                <span class="badge {{ 'badge-warning' if q.dry_run else 'badge-primary' }}">
-                  {{ 'Dry Run' if q.dry_run else 'Live' }}
+                <div style="font-weight: 600; color: #fff;">{{ queue_status.active_run.script_name }}</div>
+                <div style="font-size: 0.8rem; color: var(--accent-secondary); font-weight: 600;">{{ queue_status.active_run.category }} &bull; <span style="color: var(--accent-primary);">ACTIVE NOW</span></div>
+              </td>
+              <td>
+                <span class="badge {{ 'badge-warning' if queue_status.active_run.dry_run else 'badge-primary' }}">
+                  {{ 'Dry Run' if queue_status.active_run.dry_run else 'Live' }}
                 </span>
               </td>
-              <td style="font-size: 0.85rem; color: var(--text-secondary);">{{ q.enqueued_at.replace('T', ' ')[:19] }}</td>
+              <td style="font-size: 0.85rem; color: var(--text-secondary);">{{ queue_status.active_run.started_at.replace('T', ' ')[:19] if queue_status.active_run.started_at else 'In Progress' }}</td>
               <td style="text-align: right;">
-                <div style="display: inline-flex; gap: 4px;">
-                  <button class="btn btn-secondary btn-sm" onclick="reorderQueue('{{ q.run_id }}', 'up')" title="Move Up" {{ 'disabled' if loop.first else '' }}>↑</button>
-                  <button class="btn btn-secondary btn-sm" onclick="reorderQueue('{{ q.run_id }}', 'down')" title="Move Down" {{ 'disabled' if loop.last else '' }}>↓</button>
-                  <button class="btn btn-danger btn-sm" onclick="removeFromQueue('{{ q.run_id }}')" title="Remove">&times;</button>
-                </div>
+                <button class="btn btn-danger btn-sm" onclick="cancelActiveJob()" title="Cancel Active Job">Cancel</button>
               </td>
             </tr>
-          {% endfor %}
+          {% endif %}
+          {% if has_queued %}
+            {% for q in queue_status.queued_runs %}
+              <tr class="queue-row">
+                <td style="font-weight: 700; color: var(--accent-primary); width: 48px;">#{{ loop.index }}</td>
+                <td>
+                  <div style="font-weight: 600; color: #fff;">{{ q.script_name }}</div>
+                  <div style="font-size: 0.8rem; color: var(--text-muted);">{{ q.category }} &bull; <span style="color: var(--text-secondary);">Queued</span></div>
+                </td>
+                <td>
+                  <span class="badge {{ 'badge-warning' if q.dry_run else 'badge-primary' }}">
+                    {{ 'Dry Run' if q.dry_run else 'Live' }}
+                  </span>
+                </td>
+                <td style="font-size: 0.85rem; color: var(--text-secondary);">{{ q.enqueued_at.replace('T', ' ')[:19] if q.enqueued_at else '-' }}</td>
+                <td style="text-align: right;">
+                  <div style="display: inline-flex; gap: 4px;">
+                    <button class="btn btn-secondary btn-sm" onclick="reorderQueue('{{ q.run_id }}', 'up')" title="Move Up" {{ 'disabled' if loop.first else '' }}>↑</button>
+                    <button class="btn btn-secondary btn-sm" onclick="reorderQueue('{{ q.run_id }}', 'down')" title="Move Down" {{ 'disabled' if loop.last else '' }}>↓</button>
+                    <button class="btn btn-danger btn-sm" onclick="removeFromQueue('{{ q.run_id }}')" title="Remove">&times;</button>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          {% endif %}
         {% else %}
           <tr>
             <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">

@@ -28,10 +28,16 @@ class QueueManager:
         
         self._listeners: Set[asyncio.Queue] = set()
         self._worker_task: Optional[asyncio.Task] = None
-        self._shutdown_event = asyncio.Event()
+        self._shutdown_event: Optional[asyncio.Event] = None
         
         # Circular buffer of recent log entries for active job (for late-connecting UI clients)
         self.recent_logs: deque = deque(maxlen=300)
+
+    @property
+    def shutdown_event(self) -> asyncio.Event:
+        if self._shutdown_event is None:
+            self._shutdown_event = asyncio.Event()
+        return self._shutdown_event
 
     @classmethod
     def get_instance(cls) -> "QueueManager":
@@ -43,16 +49,6 @@ class QueueManager:
         """Subscribe an SSE client queue."""
         q: asyncio.Queue = asyncio.Queue(maxsize=200)
         self._listeners.add(q)
-        status_event = {
-            "type": "status",
-            "active_job": self.active_job,
-            "is_running": self.active_run_id is not None,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-        try:
-            q.put_nowait(status_event)
-        except Exception:
-            pass
         return q
 
     def unsubscribe(self, q: asyncio.Queue) -> None:
@@ -74,19 +70,29 @@ class QueueManager:
     def ensure_worker_running(self) -> None:
         """Starts the background worker queue consumer if not already running."""
         if self._worker_task is None or self._worker_task.done():
-            self._shutdown_event.clear()
+            self.shutdown_event.clear()
             self._worker_task = asyncio.create_task(self._queue_worker_loop())
 
     def start_worker(self) -> None:
-        """Starts worker if there are pending jobs."""
+        """Clean up orphaned runs and start worker if pending jobs exist."""
         session_factory = get_session_factory(self.config.database_path)
         with session_factory() as session:
+            # Clean up stale running jobs from previous process restarts
+            stale = crud.get_active_job(session)
+            if stale and (self.active_run_id is None or stale.run_id != self.active_run_id):
+                crud.update_job_status(
+                    session=session,
+                    run_id=stale.run_id,
+                    status="failed",
+                    finished_at=datetime.now(timezone.utc),
+                    error_message="Job interrupted by server restart.",
+                )
             if crud.get_queued_jobs(session):
                 self.ensure_worker_running()
 
     async def stop_worker(self) -> None:
         """Gracefully signals queue consumer to stop."""
-        self._shutdown_event.set()
+        self.shutdown_event.set()
         if self._current_process:
             try:
                 self._current_process.terminate()
@@ -103,7 +109,7 @@ class QueueManager:
         """Worker loop consuming queued jobs 1-by-1 until queue is empty."""
         session_factory = get_session_factory(self.config.database_path)
 
-        while not self._shutdown_event.is_set():
+        while not self.shutdown_event.is_set():
             try:
                 next_job_id: Optional[str] = None
                 with session_factory() as session:
@@ -116,6 +122,8 @@ class QueueManager:
                     break
 
                 await self._run_single_job(next_job_id)
+                # Small pause to allow process handles and SSE broadcasts to settle cleanly
+                await asyncio.sleep(0.5)
 
             except asyncio.CancelledError:
                 break
@@ -164,6 +172,11 @@ class QueueManager:
             "run_id": run_id,
             "job": self.active_job,
             "timestamp": started_at.isoformat(),
+        })
+        self.broadcast({
+            "type": "queue_updated",
+            "action": "started",
+            "run_id": run_id,
         })
 
         log_file_path = Path(self.config.logs_dir) / f"{run_id}.log"
@@ -270,6 +283,12 @@ class QueueManager:
             self._current_process = None
             self._is_cancelled = False
 
+            self.broadcast({
+                "type": "queue_updated",
+                "action": "finished",
+                "run_id": run_id,
+            })
+
     def _emit_log_line(self, run_id: str, line: str) -> None:
         log_item = {
             "type": "log",
@@ -307,7 +326,8 @@ class QueueManager:
 
         with session_factory() as session:
             queued = crud.get_queued_jobs(session)
-            position = len(queued) + 1
+            max_pos = max([j.queue_position for j in queued if j.queue_position is not None] or [0])
+            position = max_pos + 1
 
             job = crud.create_job_run(
                 session=session,
@@ -331,13 +351,39 @@ class QueueManager:
         return job
 
     async def enqueue_batch(self, script_ids: List[str], dry_run: bool = False) -> List[JobRun]:
-        enqueued_jobs = []
-        for sid in script_ids:
-            try:
-                job = await self.enqueue_job(sid, dry_run=dry_run)
+        session_factory = get_session_factory(self.config.database_path)
+        enqueued_jobs: List[JobRun] = []
+
+        with session_factory() as session:
+            queued = crud.get_queued_jobs(session)
+            max_pos = max([j.queue_position for j in queued if j.queue_position is not None] or [0])
+
+            for sid in script_ids:
+                script = get_script_by_id(sid)
+                if not script:
+                    continue
+                max_pos += 1
+                run_id = str(uuid.uuid4())
+                job = crud.create_job_run(
+                    session=session,
+                    run_id=run_id,
+                    script_id=script.id,
+                    script_name=script.name,
+                    category=script.category,
+                    script_path=script.file_path,
+                    dry_run=dry_run,
+                    queue_position=max_pos,
+                )
                 enqueued_jobs.append(job)
-            except Exception as e:
-                print(f"[QueueManager] Failed to enqueue {sid}: {e}")
+
+        if enqueued_jobs:
+            self.broadcast({
+                "type": "queue_updated",
+                "action": "batch_enqueued",
+                "count": len(enqueued_jobs),
+            })
+            self.ensure_worker_running()
+
         return enqueued_jobs
 
     async def cancel_active_job(self) -> bool:
@@ -360,6 +406,10 @@ class QueueManager:
             if not job or job.status != "queued":
                 return False
             success = crud.delete_job_run(session, run_id)
+            if success:
+                remaining = crud.get_queued_jobs(session)
+                pos_map = {j.run_id: i + 1 for i, j in enumerate(remaining)}
+                crud.update_queue_positions(session, pos_map)
             
         if success:
             self.broadcast({
@@ -406,7 +456,7 @@ class QueueManager:
             queued = crud.get_queued_jobs(session)
 
             active_dict = None
-            if active:
+            if active and self.active_run_id == active.run_id:
                 active_dict = {
                     "run_id": active.run_id,
                     "script_id": active.script_id,
@@ -415,6 +465,9 @@ class QueueManager:
                     "dry_run": active.dry_run,
                     "started_at": active.started_at.isoformat() if active.started_at else None,
                 }
+            elif self.active_job:
+                active_dict = self.active_job
+
             queued_list = [
                 {
                     "run_id": q.run_id,
@@ -423,7 +476,7 @@ class QueueManager:
                     "category": q.category,
                     "dry_run": q.dry_run,
                     "position": q.queue_position,
-                    "enqueued_at": q.enqueued_at.isoformat(),
+                    "enqueued_at": q.enqueued_at.isoformat() if q.enqueued_at else None,
                 } for q in queued
             ]
 

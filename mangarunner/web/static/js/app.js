@@ -92,7 +92,13 @@ function initSSE() {
 function updateGlobalStatus(data) {
   const isRunning = Boolean(data.is_running);
   const activeJob = data.active_run || (data.active_job ? data.active_job : null);
-  const queueCount = data.queue_count !== undefined ? data.queue_count : (data.queued_runs ? data.queued_runs.length : 0);
+  
+  let queueCount = null;
+  if (data.queue_count !== undefined) {
+    queueCount = data.queue_count;
+  } else if (data.queued_runs !== undefined && Array.isArray(data.queued_runs)) {
+    queueCount = data.queued_runs.length;
+  }
 
   const dot = document.getElementById("global-status-dot");
   const text = document.getElementById("global-status-text");
@@ -105,11 +111,11 @@ function updateGlobalStatus(data) {
   if (text) {
     if (isRunning && activeJob) {
       const dryTag = activeJob.dry_run ? " [Dry Run]" : "";
-      const qTag = queueCount > 0 ? ` (Queued: ${queueCount})` : "";
+      const qTag = (queueCount !== null && queueCount > 0) ? ` (Queued: ${queueCount})` : "";
       text.textContent = `Running: ${activeJob.script_name}${dryTag}${qTag}`;
-    } else if (queueCount > 0) {
+    } else if (queueCount !== null && queueCount > 0) {
       text.textContent = `Idle (Queued: ${queueCount})`;
-    } else {
+    } else if (!isRunning) {
       text.textContent = "Engine Idle";
     }
   }
@@ -131,6 +137,9 @@ function handleJobStarted(data) {
   if (terminal) {
     terminal.innerHTML = "";
   }
+
+  // Sync queue state immediately
+  handleQueueUpdated();
 }
 
 function handleJobFinished(data) {
@@ -138,10 +147,7 @@ function handleJobFinished(data) {
   showToast(`Job ${data.status.toUpperCase()} in ${data.duration_seconds.toFixed(1)}s`, type);
   
   // Refresh queue status
-  fetch("/api/queue/status")
-    .then((r) => r.json())
-    .then((status) => updateGlobalStatus(status))
-    .catch((err) => console.error("Error refreshing queue status", err));
+  handleQueueUpdated();
 }
 
 function appendLogLine(data) {
@@ -201,25 +207,60 @@ function updateActivePageUI(isRunning, activeJob, queuedRuns) {
         activeBadge.textContent = "IDLE";
       }
       if (activeCategory) {
-        activeCategory.textContent = "Waiting for queue";
+        activeCategory.textContent = "Queue engine is standing by";
       }
     }
   }
 
-  if (queueCountEl && queuedRuns) {
+  if (queueCountEl && queuedRuns !== undefined) {
     queueCountEl.textContent = queuedRuns.length;
   }
 
-  if (queueTableBody && queuedRuns) {
-    if (queuedRuns.length === 0) {
+  if (queueTableBody && queuedRuns !== undefined) {
+    const hasActive = isRunning && activeJob;
+    const hasQueued = queuedRuns && queuedRuns.length > 0;
+
+    if (!hasActive && !hasQueued) {
       queueTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">Queue is empty. Select scripts from the Scripts catalog to add.</td></tr>`;
-    } else {
-      queueTableBody.innerHTML = queuedRuns.map((job, idx) => `
+      return;
+    }
+
+    let rowsHtml = "";
+
+    // 1. Show currently active job at the top of the queue table with a distinct "ACTIVE NOW" indicator
+    if (hasActive) {
+      rowsHtml += `
+        <tr class="queue-row queue-row-active" style="background: rgba(99, 102, 241, 0.08); border-left: 3px solid var(--accent-primary);">
+          <td style="width: 48px; text-align: center;">
+            <div class="pulse-dot syncing" style="display: inline-block;" title="Currently Executing"></div>
+          </td>
+          <td>
+            <div style="font-weight: 600; color: #fff;">${escapeHtml(activeJob.script_name)}</div>
+            <div style="font-size: 0.8rem; color: var(--accent-secondary); font-weight: 600;">${escapeHtml(activeJob.category || '')} &bull; <span style="color: var(--accent-primary);">ACTIVE NOW</span></div>
+          </td>
+          <td>
+            <span class="badge ${activeJob.dry_run ? 'badge-warning' : 'badge-primary'}">
+              ${activeJob.dry_run ? 'Dry Run' : 'Live'}
+            </span>
+          </td>
+          <td style="font-size: 0.85rem; color: var(--text-secondary);">
+            ${activeJob.started_at ? activeJob.started_at.replace('T', ' ').slice(0, 19) : 'In Progress'}
+          </td>
+          <td style="text-align: right;">
+            <button class="btn btn-danger btn-sm" onclick="cancelActiveJob()" title="Cancel Active Job">Cancel</button>
+          </td>
+        </tr>
+      `;
+    }
+
+    // 2. Show all pending queued jobs
+    if (hasQueued) {
+      rowsHtml += queuedRuns.map((job, idx) => `
         <tr class="queue-row">
           <td style="font-weight: 700; color: var(--accent-primary); width: 48px;">#${idx + 1}</td>
           <td>
-            <div style="font-weight: 600; color: #fff;">${job.script_name}</div>
-            <div style="font-size: 0.8rem; color: var(--text-muted);">${job.category}</div>
+            <div style="font-weight: 600; color: #fff;">${escapeHtml(job.script_name)}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(job.category || '')} &bull; <span style="color: var(--text-secondary);">Queued</span></div>
           </td>
           <td>
             <span class="badge ${job.dry_run ? 'badge-warning' : 'badge-primary'}">
@@ -237,6 +278,8 @@ function updateActivePageUI(isRunning, activeJob, queuedRuns) {
         </tr>
       `).join("");
     }
+
+    queueTableBody.innerHTML = rowsHtml;
   }
 }
 
