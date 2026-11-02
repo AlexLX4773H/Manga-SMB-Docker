@@ -3,6 +3,27 @@
 {% block title %}Run History{% endblock %}
 {% block header_title %}Run History &amp; Audit{% endblock %}
 
+{% block header_actions %}
+  <div style="display: flex; align-items: center; gap: 8px;">
+    <button id="btn-delete-selected" class="btn btn-danger btn-sm" style="display: none;" onclick="deleteSelectedRuns()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      </svg>
+      Delete Selected (<span id="selected-runs-count">0</span>)
+    </button>
+    {% if total_count > 0 %}
+      <button class="btn btn-secondary btn-sm" onclick="clearHistory('{{ filter_status }}')" title="Remove completed/failed/cancelled history records">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        {{ 'Clear ' + filter_status.capitalize() if filter_status else 'Clear All History' }}
+      </button>
+    {% endif %}
+  </div>
+{% endblock %}
+
 {% block content %}
 <div class="card" style="margin-bottom: 24px;">
   <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
@@ -15,8 +36,13 @@
         <option value="cancelled" {{ 'selected' if filter_status == 'cancelled' else '' }}>Cancelled</option>
       </select>
     </div>
-    <div style="font-size: 0.85rem; color: var(--text-muted);">
-      Total Recorded: {{ total_count }} run(s)
+    <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+      <button id="btn-delete-selected-inline" class="btn btn-danger btn-sm" style="display: none;" onclick="deleteSelectedRuns()">
+        Delete Selected (<span id="selected-runs-count-inline">0</span>)
+      </button>
+      <div style="font-size: 0.85rem; color: var(--text-muted);">
+        Total Recorded: {{ total_count }} run(s)
+      </div>
     </div>
   </div>
 </div>
@@ -26,6 +52,9 @@
     <table class="data-table">
       <thead>
         <tr>
+          <th style="width: 40px; text-align: center;">
+            <input type="checkbox" id="select-all-runs" onchange="toggleSelectAllRuns(this)" title="Select all on this page" style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-primary);">
+          </th>
           <th>Script &amp; Category</th>
           <th>Status</th>
           <th>Mode</th>
@@ -38,7 +67,10 @@
       <tbody>
         {% if runs %}
           {% for r in runs %}
-            <tr>
+            <tr id="run-row-{{ r.run_id }}">
+              <td style="width: 40px; text-align: center;">
+                <input type="checkbox" class="run-select-cb" value="{{ r.run_id }}" onchange="updateSelectedRunsCount()" {{ 'disabled' if r.status in ['running', 'queued'] else '' }} style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-primary);">
+              </td>
               <td>
                 <div style="font-weight: 600; color: #fff;">{{ r.script_name }}</div>
                 <div style="font-size: 0.78rem; color: var(--text-muted);">{{ r.category }} &bull; <span style="font-family: var(--font-mono);">{{ r.run_id[:8] }}</span></div>
@@ -78,13 +110,18 @@
                   <a class="btn btn-secondary btn-sm" href="/runs/{{ r.run_id }}">
                     Details
                   </a>
+                  {% if r.status not in ['running', 'queued'] %}
+                    <button class="btn btn-danger btn-sm" onclick="deleteRunRecord('{{ r.run_id }}', '{{ r.script_name }}')" title="Remove this run from history">
+                      Delete
+                    </button>
+                  {% endif %}
                 </div>
               </td>
             </tr>
           {% endfor %}
         {% else %}
           <tr>
-            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">
+            <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 32px;">
               No run records found matching criteria.
             </td>
           </tr>
@@ -108,4 +145,3 @@
   {% endif %}
 </div>
 {% endblock %}
-

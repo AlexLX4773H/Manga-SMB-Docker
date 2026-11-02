@@ -561,6 +561,134 @@ async function openLogModal(runId) {
   }
 }
 
+// Run History Management
+async function deleteRunRecord(runId, scriptName, redirectToList = false) {
+  const name = scriptName ? ` "${scriptName}"` : "";
+  if (!confirm(`Are you sure you want to remove run${name} (${runId.slice(0, 8)}) from history?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/runs/${runId}`, {
+      method: "DELETE",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "Failed to remove run from history");
+    }
+
+    showToast("Run removed from history.", "info");
+
+    if (redirectToList) {
+      window.location.href = "/runs";
+    } else {
+      const row = document.getElementById(`run-row-${runId}`);
+      if (row) {
+        row.style.opacity = "0";
+        row.style.transition = "opacity 0.25s ease";
+        setTimeout(() => {
+          row.remove();
+          updateSelectedRunsCount();
+          const tbody = document.querySelector(".data-table tbody");
+          if (tbody && tbody.children.length === 0) {
+            window.location.reload();
+          }
+        }, 250);
+      } else {
+        window.location.reload();
+      }
+    }
+  } catch (err) {
+    showToast(`Error: ${err.message}`, "error");
+  }
+}
+
+function toggleSelectAllRuns(master) {
+  const checkboxes = document.querySelectorAll(".run-select-cb:not([disabled])");
+  checkboxes.forEach((cb) => {
+    cb.checked = master.checked;
+  });
+  updateSelectedRunsCount();
+}
+
+function updateSelectedRunsCount() {
+  const checked = document.querySelectorAll(".run-select-cb:checked");
+  const count = checked.length;
+
+  const countEl = document.getElementById("selected-runs-count");
+  const countInlineEl = document.getElementById("selected-runs-count-inline");
+  const btnDeleteSelected = document.getElementById("btn-delete-selected");
+  const btnDeleteSelectedInline = document.getElementById("btn-delete-selected-inline");
+  const selectAll = document.getElementById("select-all-runs");
+  const allSelectable = document.querySelectorAll(".run-select-cb:not([disabled])");
+
+  if (countEl) countEl.textContent = count;
+  if (countInlineEl) countInlineEl.textContent = count;
+
+  const displayStyle = count > 0 ? "inline-flex" : "none";
+  if (btnDeleteSelected) btnDeleteSelected.style.display = displayStyle;
+  if (btnDeleteSelectedInline) btnDeleteSelectedInline.style.display = displayStyle;
+
+  if (selectAll && allSelectable.length > 0) {
+    selectAll.checked = count === allSelectable.length;
+    selectAll.indeterminate = count > 0 && count < allSelectable.length;
+  }
+}
+
+async function deleteSelectedRuns() {
+  const checked = Array.from(document.querySelectorAll(".run-select-cb:checked")).map((cb) => cb.value);
+  if (checked.length === 0) return;
+
+  if (!confirm(`Are you sure you want to remove ${checked.length} selected run(s) from history?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/runs/batch-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ run_ids: checked }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "Failed to remove selected runs");
+    }
+
+    showToast(`Removed ${data.deleted_count} run(s) from history.`, "info");
+    setTimeout(() => {
+      window.location.reload();
+    }, 350);
+  } catch (err) {
+    showToast(`Error: ${err.message}`, "error");
+  }
+}
+
+async function clearHistory(statusFilter = "") {
+  const label = statusFilter ? `${statusFilter} ` : "all ";
+  const confirmMsg = `Are you sure you want to remove ${label}completed/failed/cancelled runs from history? Active or queued runs will not be deleted.`;
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  try {
+    const url = statusFilter ? `/api/runs/clear?status=${encodeURIComponent(statusFilter)}` : "/api/runs/clear";
+    const res = await fetch(url, {
+      method: "DELETE",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "Failed to clear history");
+    }
+
+    showToast(`Cleared ${data.cleared_count} run(s) from history.`, "info");
+    setTimeout(() => {
+      window.location.reload();
+    }, 350);
+  } catch (err) {
+    showToast(`Error: ${err.message}`, "error");
+  }
+}
+
 // Sidebar Drawer
 function toggleSidebar(open) {
   const sidebar = document.getElementById("sidebar-nav");

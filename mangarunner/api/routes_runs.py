@@ -1,13 +1,19 @@
 import json
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import BaseModel
+from sqlalchemy import select, and_
 from sqlalchemy.orm import Session
 from mangarunner.db.database import get_db_session
+from mangarunner.db.models import JobRun
 from mangarunner.db import crud
 
 router = APIRouter(prefix="/api/runs", tags=["Runs"])
+
+class BatchDeleteRunsRequest(BaseModel):
+    run_ids: List[str]
 
 @router.get("")
 def list_runs(
@@ -114,6 +120,52 @@ def get_run_logs(run_id: str, session: Session = Depends(get_db_session)):
         log_content = "Log file not found."
 
     return Response(content=log_content, media_type="text/plain; charset=utf-8")
+
+@router.post("/batch-delete")
+def batch_delete_runs(req: BatchDeleteRunsRequest, session: Session = Depends(get_db_session)):
+    if not req.run_ids:
+        return {"status": "success", "deleted_count": 0}
+
+    stmt = select(JobRun).where(
+        and_(
+            JobRun.run_id.in_(req.run_ids),
+            JobRun.status.not_in(["running", "queued"])
+        )
+    )
+    runs = list(session.execute(stmt).scalars().all())
+
+    for r in runs:
+        if r.log_file and os.path.exists(r.log_file):
+            try:
+                os.remove(r.log_file)
+            except Exception:
+                pass
+
+    run_ids_to_del = [r.run_id for r in runs]
+    deleted_count = crud.delete_job_runs(session, run_ids_to_del) if run_ids_to_del else 0
+    return {"status": "success", "deleted_count": deleted_count}
+
+@router.delete("/clear")
+def clear_history_runs(
+    status: Optional[str] = Query(None),
+    session: Session = Depends(get_db_session)
+):
+    conditions = [JobRun.status.not_in(["running", "queued"])]
+    if status and status in ("completed", "failed", "cancelled"):
+        conditions.append(JobRun.status == status)
+
+    stmt = select(JobRun).where(and_(*conditions))
+    runs = list(session.execute(stmt).scalars().all())
+
+    for r in runs:
+        if r.log_file and os.path.exists(r.log_file):
+            try:
+                os.remove(r.log_file)
+            except Exception:
+                pass
+
+    cleared_count = crud.clear_history_runs(session, status=status)
+    return {"status": "success", "cleared_count": cleared_count}
 
 @router.delete("/{run_id}")
 def delete_run(run_id: str, session: Session = Depends(get_db_session)):

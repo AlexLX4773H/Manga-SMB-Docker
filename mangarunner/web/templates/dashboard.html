@@ -226,7 +226,7 @@
     {% if recent_runs %}
       <div style="display: flex; flex-direction: column; gap: 8px;">
         {% for r in recent_runs[:6] %}
-          <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+          <div id="run-row-{{ r.run_id }}" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
             <div>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <span class="badge badge-{{ r.status }}">{{ r.status }}</span>
@@ -239,8 +239,11 @@
                 {{ r.category }} &bull; {{ r.enqueued_at | time_ago }} &bull; Duration: {{ r.duration_seconds | format_duration }}
               </div>
             </div>
-            <div>
+            <div style="display: flex; gap: 6px;">
               <button class="btn btn-secondary btn-sm" onclick="openLogModal('{{ r.run_id }}')">Log</button>
+              {% if r.status not in ['running', 'queued'] %}
+                <button class="btn btn-danger btn-sm" onclick="deleteRunRecord('{{ r.run_id }}', '{{ r.script_name }}')" title="Remove from History">&times;</button>
+              {% endif %}
             </div>
           </div>
         {% endfor %}

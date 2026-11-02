@@ -117,6 +117,28 @@ def delete_job_run(session: Session, run_id: str) -> bool:
     session.commit()
     return result.rowcount > 0
 
+def delete_job_runs(session: Session, run_ids: List[str]) -> int:
+    if not run_ids:
+        return 0
+    stmt = delete(JobRun).where(
+        and_(
+            JobRun.run_id.in_(run_ids),
+            JobRun.status.not_in(["running", "queued"])
+        )
+    )
+    result = session.execute(stmt)
+    session.commit()
+    return result.rowcount
+
+def clear_history_runs(session: Session, status: Optional[str] = None) -> int:
+    conditions = [JobRun.status.not_in(["running", "queued"])]
+    if status and status in ("completed", "failed", "cancelled"):
+        conditions.append(JobRun.status == status)
+    stmt = delete(JobRun).where(and_(*conditions))
+    result = session.execute(stmt)
+    session.commit()
+    return result.rowcount
+
 def clear_queued_runs(session: Session) -> int:
     stmt = delete(JobRun).where(JobRun.status == "queued")
     result = session.execute(stmt)
