@@ -5,7 +5,7 @@
 
 {% block header_actions %}
   <div style="display: flex; align-items: center; gap: 8px;">
-    <button id="btn-delete-selected" class="btn btn-danger btn-sm" style="display: none;" onclick="deleteSelectedRuns()">
+    <button id="btn-delete-selected" type="button" class="btn btn-danger btn-sm" style="display: none;" onclick="deleteSelectedRuns()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="3 6 5 6 21 6"></polyline>
         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -13,7 +13,7 @@
       Delete Selected (<span id="selected-runs-count">0</span>)
     </button>
     {% if total_count > 0 %}
-      <button class="btn btn-secondary btn-sm" onclick="clearHistory('{{ filter_status }}')" title="Remove completed/failed/cancelled history records">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="clearHistory('{{ filter_status }}')" title="Remove completed/failed/cancelled history records">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6"></polyline>
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -37,7 +37,7 @@
       </select>
     </div>
     <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-      <button id="btn-delete-selected-inline" class="btn btn-danger btn-sm" style="display: none;" onclick="deleteSelectedRuns()">
+      <button id="btn-delete-selected-inline" type="button" class="btn btn-danger btn-sm" style="display: none;" onclick="deleteSelectedRuns()">
         Delete Selected (<span id="selected-runs-count-inline">0</span>)
       </button>
       <div style="font-size: 0.85rem; color: var(--text-muted);">
@@ -72,7 +72,7 @@
                 <input type="checkbox" class="run-select-cb" value="{{ r.run_id }}" onchange="updateSelectedRunsCount()" {{ 'disabled' if r.status in ['running', 'queued'] else '' }} style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-primary);">
               </td>
               <td>
-                <div style="font-weight: 600; color: #fff;">{{ r.script_name }}</div>
+                <div class="run-script-name" style="font-weight: 600; color: #fff;">{{ r.script_name }}</div>
                 <div style="font-size: 0.78rem; color: var(--text-muted);">{{ r.category }} &bull; <span style="font-family: var(--font-mono);">{{ r.run_id[:8] }}</span></div>
               </td>
               <td>
@@ -93,7 +93,7 @@
                 {% if r.reports %}
                   <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                     {% for rep in r.reports %}
-                      <button class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.75rem;" onclick="openReportPreview('{{ rep }}')">
+                      <button type="button" class="btn btn-secondary btn-sm" style="padding: 2px 8px; font-size: 0.75rem;" onclick="openReportPreview('{{ rep }}')">
                         {{ rep }}
                       </button>
                     {% endfor %}
@@ -104,14 +104,19 @@
               </td>
               <td style="text-align: right;">
                 <div style="display: inline-flex; gap: 6px;">
-                  <button class="btn btn-secondary btn-sm" onclick="openLogModal('{{ r.run_id }}')">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="openLogModal('{{ r.run_id }}')">
                     View Log
                   </button>
                   <a class="btn btn-secondary btn-sm" href="/runs/{{ r.run_id }}">
                     Details
                   </a>
                   {% if r.status not in ['running', 'queued'] %}
-                    <button class="btn btn-danger btn-sm" onclick="deleteRunRecord('{{ r.run_id }}', '{{ r.script_name }}')" title="Remove this run from history">
+                    <button type="button"
+                            class="btn btn-danger btn-sm btn-delete-run"
+                            data-run-id="{{ r.run_id }}"
+                            data-script-name="{{ r.script_name | e }}"
+                            onclick="deleteRunRecord('{{ r.run_id }}')"
+                            title="Remove this run from history">
                       Delete
                     </button>
                   {% endif %}
@@ -144,4 +149,23 @@
     </div>
   {% endif %}
 </div>
+
+<script>
+// Fallback click listener ensuring deletion always functions even with cached scripts
+document.addEventListener("click", function(e) {
+  var btn = e.target.closest(".btn-delete-run");
+  if (btn) {
+    var runId = btn.getAttribute("data-run-id");
+    var scriptName = btn.getAttribute("data-script-name") || "";
+    if (typeof window.deleteRunRecord === "function") {
+      window.deleteRunRecord(runId, false, scriptName);
+    } else if (runId && confirm("Remove run " + (scriptName ? '"' + scriptName + '" ' : '') + "from history?")) {
+      fetch("/api/runs/" + runId, { method: "DELETE" })
+        .then(function(r) { return r.json(); })
+        .then(function() { window.location.reload(); })
+        .catch(function(err) { alert("Delete failed: " + err); });
+    }
+  }
+});
+</script>
 {% endblock %}

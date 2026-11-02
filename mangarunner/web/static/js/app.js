@@ -561,46 +561,101 @@ async function openLogModal(runId) {
   }
 }
 
-// Run History Management
-async function deleteRunRecord(runId, scriptName, redirectToList = false) {
-  const name = scriptName ? ` "${scriptName}"` : "";
-  if (!confirm(`Are you sure you want to remove run${name} (${runId.slice(0, 8)}) from history?`)) {
-    return;
-  }
+// Confirm Dialog Modal (in-app, cannot be blocked by iframes / CasaOS)
+function showConfirmDialog(title, message, confirmBtnText, onConfirm) {
+  const modal = document.getElementById("confirm-modal");
+  const titleEl = document.getElementById("confirm-modal-title");
+  const msgEl = document.getElementById("confirm-modal-message");
+  const actBtn = document.getElementById("confirm-modal-action-btn");
 
-  try {
-    const res = await fetch(`/api/runs/${runId}`, {
-      method: "DELETE",
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || "Failed to remove run from history");
-    }
-
-    showToast("Run removed from history.", "info");
-
-    if (redirectToList) {
-      window.location.href = "/runs";
-    } else {
-      const row = document.getElementById(`run-row-${runId}`);
-      if (row) {
-        row.style.opacity = "0";
-        row.style.transition = "opacity 0.25s ease";
-        setTimeout(() => {
-          row.remove();
-          updateSelectedRunsCount();
-          const tbody = document.querySelector(".data-table tbody");
-          if (tbody && tbody.children.length === 0) {
-            window.location.reload();
-          }
-        }, 250);
-      } else {
-        window.location.reload();
+  if (modal && titleEl && msgEl && actBtn) {
+    titleEl.textContent = title || "Confirm Action";
+    msgEl.innerHTML = message || "Are you sure you want to proceed?";
+    actBtn.textContent = confirmBtnText || "Confirm";
+    actBtn.onclick = async () => {
+      closeConfirmModal();
+      if (typeof onConfirm === "function") {
+        try {
+          await onConfirm();
+        } catch (err) {
+          console.error("Action error:", err);
+          showToast(`Error: ${err.message}`, "error");
+        }
+      }
+    };
+    modal.classList.add("active");
+  } else {
+    // Fallback if modal DOM element is not present
+    const plainText = message ? message.replace(/<[^>]+>/g, '') : "Are you sure?";
+    if (window.confirm(plainText)) {
+      if (typeof onConfirm === "function") {
+        onConfirm();
       }
     }
-  } catch (err) {
-    showToast(`Error: ${err.message}`, "error");
   }
+}
+
+function closeConfirmModal() {
+  const modal = document.getElementById("confirm-modal");
+  if (modal) modal.classList.remove("active");
+}
+
+// Run History Management
+async function deleteRunRecord(runId, redirectToList = false, scriptName = "") {
+  if (!runId) return;
+
+  // Retrieve script name if not explicitly passed
+  if (!scriptName) {
+    const row = document.getElementById(`run-row-${runId}`);
+    if (row) {
+      const btn = row.querySelector(".btn-delete-run");
+      if (btn && btn.getAttribute("data-script-name")) {
+        scriptName = btn.getAttribute("data-script-name");
+      } else {
+        const titleEl = row.querySelector(".run-script-name, strong, div");
+        if (titleEl) scriptName = titleEl.textContent.trim();
+      }
+    }
+  }
+
+  const nameHtml = scriptName ? `<strong>${escapeHtml(scriptName)}</strong> ` : "";
+  const msg = `Are you sure you want to remove ${nameHtml}(<span style="font-family: var(--font-mono);">${runId.slice(0, 8)}</span>) from history?`;
+
+  showConfirmDialog("Delete Run Record", msg, "Delete Run", async () => {
+    try {
+      const res = await fetch(`/api/runs/${runId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to remove run from history");
+      }
+
+      showToast("Run removed from history.", "info");
+
+      if (redirectToList) {
+        window.location.href = "/runs";
+      } else {
+        const row = document.getElementById(`run-row-${runId}`);
+        if (row) {
+          row.style.opacity = "0";
+          row.style.transition = "opacity 0.25s ease";
+          setTimeout(() => {
+            row.remove();
+            updateSelectedRunsCount();
+            const tbody = document.querySelector(".data-table tbody");
+            if (tbody && tbody.children.length === 0) {
+              window.location.reload();
+            }
+          }, 250);
+        } else {
+          window.location.reload();
+        }
+      }
+    } catch (err) {
+      showToast(`Error: ${err.message}`, "error");
+    }
+  });
 }
 
 function toggleSelectAllRuns(master) {
@@ -639,55 +694,76 @@ async function deleteSelectedRuns() {
   const checked = Array.from(document.querySelectorAll(".run-select-cb:checked")).map((cb) => cb.value);
   if (checked.length === 0) return;
 
-  if (!confirm(`Are you sure you want to remove ${checked.length} selected run(s) from history?`)) {
-    return;
-  }
+  const msg = `Are you sure you want to remove <strong>${checked.length}</strong> selected run(s) from history? Associated log files will also be removed.`;
 
-  try {
-    const res = await fetch("/api/runs/batch-delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ run_ids: checked }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || "Failed to remove selected runs");
+  showConfirmDialog("Delete Selected Runs", msg, `Delete ${checked.length} Runs`, async () => {
+    try {
+      const res = await fetch("/api/runs/batch-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ run_ids: checked }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to remove selected runs");
+      }
+
+      showToast(`Removed ${data.deleted_count} run(s) from history.`, "info");
+      setTimeout(() => {
+        window.location.reload();
+      }, 350);
+    } catch (err) {
+      showToast(`Error: ${err.message}`, "error");
     }
-
-    showToast(`Removed ${data.deleted_count} run(s) from history.`, "info");
-    setTimeout(() => {
-      window.location.reload();
-    }, 350);
-  } catch (err) {
-    showToast(`Error: ${err.message}`, "error");
-  }
+  });
 }
 
 async function clearHistory(statusFilter = "") {
-  const label = statusFilter ? `${statusFilter} ` : "all ";
-  const confirmMsg = `Are you sure you want to remove ${label}completed/failed/cancelled runs from history? Active or queued runs will not be deleted.`;
-  if (!confirm(confirmMsg)) {
-    return;
-  }
+  const label = statusFilter ? `all <strong>${escapeHtml(statusFilter)}</strong>` : "all completed, failed, and cancelled";
+  const msg = `Are you sure you want to remove ${label} runs from history? Active or queued runs will not be deleted.`;
 
-  try {
-    const url = statusFilter ? `/api/runs/clear?status=${encodeURIComponent(statusFilter)}` : "/api/runs/clear";
-    const res = await fetch(url, {
-      method: "DELETE",
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data.detail || "Failed to clear history");
+  showConfirmDialog("Clear Run History", msg, "Clear History", async () => {
+    try {
+      const url = statusFilter ? `/api/runs/clear?status=${encodeURIComponent(statusFilter)}` : "/api/runs/clear";
+      const res = await fetch(url, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to clear history");
+      }
+
+      showToast(`Cleared ${data.cleared_count} run(s) from history.`, "info");
+      setTimeout(() => {
+        window.location.reload();
+      }, 350);
+    } catch (err) {
+      showToast(`Error: ${err.message}`, "error");
     }
-
-    showToast(`Cleared ${data.cleared_count} run(s) from history.`, "info");
-    setTimeout(() => {
-      window.location.reload();
-    }, 350);
-  } catch (err) {
-    showToast(`Error: ${err.message}`, "error");
-  }
+  });
 }
+
+// Global Event Delegation for Delete Buttons
+document.addEventListener("click", (e) => {
+  const deleteBtn = e.target.closest(".btn-delete-run");
+  if (deleteBtn) {
+    const runId = deleteBtn.getAttribute("data-run-id");
+    const redirect = deleteBtn.getAttribute("data-redirect") === "true";
+    const scriptName = deleteBtn.getAttribute("data-script-name") || "";
+    if (runId) {
+      deleteRunRecord(runId, redirect, scriptName);
+    }
+  }
+});
+
+// Explicit window bindings
+window.showConfirmDialog = showConfirmDialog;
+window.closeConfirmModal = closeConfirmModal;
+window.deleteRunRecord = deleteRunRecord;
+window.toggleSelectAllRuns = toggleSelectAllRuns;
+window.updateSelectedRunsCount = updateSelectedRunsCount;
+window.deleteSelectedRuns = deleteSelectedRuns;
+window.clearHistory = clearHistory;
 
 // Sidebar Drawer
 function toggleSidebar(open) {

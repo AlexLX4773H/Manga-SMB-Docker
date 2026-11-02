@@ -240,9 +240,14 @@
               </div>
             </div>
             <div style="display: flex; gap: 6px;">
-              <button class="btn btn-secondary btn-sm" onclick="openLogModal('{{ r.run_id }}')">Log</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="openLogModal('{{ r.run_id }}')">Log</button>
               {% if r.status not in ['running', 'queued'] %}
-                <button class="btn btn-danger btn-sm" onclick="deleteRunRecord('{{ r.run_id }}', '{{ r.script_name }}')" title="Remove from History">&times;</button>
+                <button type="button"
+                        class="btn btn-danger btn-sm btn-delete-run"
+                        data-run-id="{{ r.run_id }}"
+                        data-script-name="{{ r.script_name | e }}"
+                        onclick="deleteRunRecord('{{ r.run_id }}')"
+                        title="Remove from History">&times;</button>
               {% endif %}
             </div>
           </div>

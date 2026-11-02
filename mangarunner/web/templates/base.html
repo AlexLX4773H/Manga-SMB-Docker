@@ -19,8 +19,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=1.0.0">
-  <script src="/static/js/app.js?v=1.0.0" defer></script>
+  <link rel="stylesheet" href="/static/css/style.css?v=1.1.0">
+  <script src="/static/js/app.js?v=1.1.0" defer></script>
 </head>
 <body>
   <div class="app-container">
@@ -246,6 +246,23 @@
       </div>
       <div class="modal-body" id="report-modal-body">
         <!-- Dynamic content injected here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Modal: Confirmation Dialog -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-box" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="confirm-modal-title">Confirm Deletion</h3>
+        <button type="button" class="modal-close-btn" onclick="closeConfirmModal()" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 18px 0;">
+        <p id="confirm-modal-message" style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5; margin: 0;"></p>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirm-modal-action-btn">Delete</button>
       </div>
     </div>
   </div>
