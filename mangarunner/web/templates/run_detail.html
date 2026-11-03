@@ -47,8 +47,7 @@
     </div>
   </div>
 
-  <div
-    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-subtle);">
+  <div class="run-detail-grid">
     <div>
       <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Enqueued At</div>
       <div style="font-size: 0.9rem; color: #fff; font-weight: 500;">{{ run.enqueued_at | format_datetime }}</div>
@@ -79,14 +78,33 @@
       Generated Reports
     </h3>
   </div>
-  <div style="display: flex; flex-direction: column; gap: 8px;">
+  <div class="dashboard-items-list">
     {% for rep in reports %}
-    <div
-      style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(15, 23, 42, 0.4); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
-      <div style="font-weight: 600; color: #fff; font-size: 0.95rem;">{{ rep }}</div>
-      <div style="display: flex; gap: 8px;">
-        <button class="btn btn-secondary btn-sm" onclick="openReportPreview('{{ rep }}')">Preview</button>
-        <a class="btn btn-primary btn-sm" href="/api/reports/{{ rep }}/download" download>Download</a>
+    <div class="dashboard-report-item">
+      <div class="report-item-main">
+        <span class="badge {{ 'badge-completed' if rep.endswith('.xlsx') else 'badge-syncing' }} report-badge">
+          {{ 'XLSX' if rep.endswith('.xlsx') else ('TXT' if rep.endswith('.txt') else 'FILE') }}
+        </span>
+        <div class="report-item-info">
+          <div class="report-item-name" title="{{ rep }}">{{ rep }}</div>
+        </div>
+      </div>
+      <div class="report-item-actions">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="openReportPreview('{{ rep }}')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          Preview
+        </button>
+        <a class="btn btn-primary btn-sm" href="/api/reports/{{ rep }}/download" download>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download
+        </a>
       </div>
     </div>
     {% endfor %}

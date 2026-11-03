@@ -26,8 +26,8 @@
 
 {% block content %}
 <div class="card" style="margin-bottom: 24px;">
-  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-    <div style="display: flex; align-items: center; gap: 10px;">
+  <div class="runs-filter-bar">
+    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
       <span style="font-size: 0.9rem; color: var(--text-secondary);">Filter by status:</span>
       <select class="input-field" style="width: auto; padding: 6px 12px;" onchange="window.location.href = '/runs?status=' + this.value">
         <option value="" {{ 'selected' if not filter_status else '' }}>All Statuses</option>
