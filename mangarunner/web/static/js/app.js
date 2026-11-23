@@ -7,6 +7,9 @@
 let evtSource = null;
 let currentSelectedScriptId = null;
 let isDryRunSelected = true;
+let isEngineRunning = false;
+let currentActiveJobData = null;
+let currentQueueCount = 0;
 
 // Toast Notification System
 function showToast(message, type = "info") {
@@ -98,6 +101,36 @@ function updateGlobalStatus(data) {
     queueCount = data.queue_count;
   } else if (data.queued_runs !== undefined && Array.isArray(data.queued_runs)) {
     queueCount = data.queued_runs.length;
+  }
+
+  isEngineRunning = isRunning;
+  currentActiveJobData = activeJob;
+  currentQueueCount = queueCount !== null ? queueCount : 0;
+
+  // Update scripts page banner if present
+  const scriptsBanner = document.getElementById("scripts-active-banner");
+  const scriptsActiveName = document.getElementById("scripts-active-job-name");
+  const scriptsQueueCount = document.getElementById("scripts-queue-count");
+  if (scriptsBanner) {
+    scriptsBanner.style.display = (isRunning && activeJob) ? "block" : "none";
+  }
+  if (scriptsActiveName && activeJob) {
+    scriptsActiveName.textContent = activeJob.script_name;
+  }
+  if (scriptsQueueCount) {
+    scriptsQueueCount.textContent = currentQueueCount;
+  }
+
+  // If dry-run-modal is open, refresh its running indicators and buttons
+  const modal = document.getElementById("dry-run-modal");
+  if (modal && modal.classList.contains("active")) {
+    const activeNotice = document.getElementById("modal-active-job-notice");
+    const activeJobNameEl = document.getElementById("modal-active-job-name");
+    const queueTargetPosEl = document.getElementById("modal-queue-target-pos");
+    if (activeNotice) activeNotice.style.display = (isRunning && activeJob) ? "block" : "none";
+    if (activeJobNameEl && activeJob) activeJobNameEl.textContent = activeJob.script_name;
+    if (queueTargetPosEl) queueTargetPosEl.textContent = `#${currentQueueCount + 1}`;
+    updateModalButtons();
   }
 
   const dot = document.getElementById("global-status-dot");
@@ -284,22 +317,98 @@ function updateActivePageUI(isRunning, activeJob, queuedRuns) {
 }
 
 // Dry Run Confirmation Modal
-function openDryRunModal(scriptId, scriptName, category, supportsDryRun = true) {
+function updateModalButtons() {
+  const submitBtn = document.getElementById("modal-confirm-btn");
+  const addQueueBtn = document.getElementById("modal-add-queue-btn");
+  const queueChk = document.getElementById("modal-queue-if-running-chk");
+  const queueIfRunning = queueChk ? queueChk.checked : true;
+  const noQueueWarning = document.getElementById("modal-no-queue-warning");
+
+  if (isEngineRunning && currentActiveJobData) {
+    if (queueIfRunning) {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = isDryRunSelected ? "Queue as Dry Run (Next in Line)" : "Queue Live Run (Next in Line)";
+        submitBtn.className = isDryRunSelected ? "btn btn-secondary" : "btn btn-primary";
+      }
+      if (addQueueBtn) {
+        addQueueBtn.disabled = false;
+        addQueueBtn.textContent = "Add to Queue";
+      }
+      if (noQueueWarning) noQueueWarning.style.display = "none";
+    } else {
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Active Job Running (Parallel Disabled)";
+        submitBtn.className = "btn btn-secondary disabled";
+      }
+      if (addQueueBtn) {
+        addQueueBtn.disabled = true;
+      }
+      if (noQueueWarning) noQueueWarning.style.display = "block";
+    }
+  } else {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = isDryRunSelected ? "Run as Dry Run" : "Run Live (Execute)";
+      submitBtn.className = isDryRunSelected ? "btn btn-secondary" : "btn btn-primary";
+    }
+    if (addQueueBtn) {
+      addQueueBtn.disabled = false;
+      addQueueBtn.textContent = "Add to Queue";
+    }
+    if (noQueueWarning) noQueueWarning.style.display = "none";
+  }
+}
+
+function toggleQueueOption(checked) {
+  updateModalButtons();
+}
+
+async function openDryRunModal(scriptId, scriptName, category, supportsDryRun = true) {
   currentSelectedScriptId = scriptId;
   isDryRunSelected = supportsDryRun; // Default to Dry Run if supported for safety
 
   const modal = document.getElementById("dry-run-modal");
   const modalTitle = document.getElementById("modal-script-title");
   const modalCategory = document.getElementById("modal-script-category");
-  const dryRunCard = document.getElementById("mode-card-dry");
-  const liveRunCard = document.getElementById("mode-card-live");
   const reportOnlyNotice = document.getElementById("modal-report-only-notice");
+  const activeNotice = document.getElementById("modal-active-job-notice");
+  const activeJobNameEl = document.getElementById("modal-active-job-name");
+  const queueTargetPosEl = document.getElementById("modal-queue-target-pos");
+  const queueChk = document.getElementById("modal-queue-if-running-chk");
+  const noQueueWarning = document.getElementById("modal-no-queue-warning");
 
   if (modalTitle) modalTitle.textContent = scriptName;
   if (modalCategory) modalCategory.textContent = category;
 
   if (reportOnlyNotice) {
     reportOnlyNotice.style.display = supportsDryRun ? "none" : "block";
+  }
+
+  // Reset queue checkbox to checked by default (auto-queue sequentially without parallel execution)
+  if (queueChk) queueChk.checked = true;
+  if (noQueueWarning) noQueueWarning.style.display = "none";
+
+  // Fetch latest status to ensure fresh active job detection
+  try {
+    const res = await fetch("/api/queue/status");
+    if (res.ok) {
+      const qStatus = await res.json();
+      isEngineRunning = Boolean(qStatus.is_running);
+      currentActiveJobData = qStatus.active_run || null;
+      currentQueueCount = qStatus.queue_count || 0;
+    }
+  } catch (e) {
+    console.warn("Could not fetch latest queue status", e);
+  }
+
+  if (isEngineRunning && currentActiveJobData) {
+    if (activeNotice) activeNotice.style.display = "block";
+    if (activeJobNameEl) activeJobNameEl.textContent = currentActiveJobData.script_name || "Active Job";
+    if (queueTargetPosEl) queueTargetPosEl.textContent = `#${currentQueueCount + 1}`;
+  } else {
+    if (activeNotice) activeNotice.style.display = "none";
   }
 
   selectExecutionMode(isDryRunSelected);
@@ -319,7 +428,6 @@ function selectExecutionMode(isDryRun) {
   isDryRunSelected = isDryRun;
   const dryCard = document.getElementById("mode-card-dry");
   const liveCard = document.getElementById("mode-card-live");
-  const submitBtn = document.getElementById("modal-confirm-btn");
 
   if (dryCard) {
     if (isDryRun) {
@@ -337,14 +445,19 @@ function selectExecutionMode(isDryRun) {
     }
   }
 
-  if (submitBtn) {
-    submitBtn.textContent = isDryRun ? "Run as Dry Run" : "Run Live (Execute)";
-    submitBtn.className = isDryRun ? "btn btn-secondary" : "btn btn-primary";
-  }
+  updateModalButtons();
 }
 
 async function confirmAndEnqueue(redirectActive = true) {
   if (!currentSelectedScriptId) return;
+
+  const queueChk = document.getElementById("modal-queue-if-running-chk");
+  const queueIfRunning = queueChk ? queueChk.checked : true;
+
+  if (isEngineRunning && currentActiveJobData && !queueIfRunning) {
+    showToast("Cannot execute immediately: parallel execution is disabled. Enable 'Queue this job' to run sequentially.", "warning");
+    return;
+  }
 
   try {
     const res = await fetch("/api/queue/enqueue", {
@@ -353,13 +466,22 @@ async function confirmAndEnqueue(redirectActive = true) {
       body: JSON.stringify({
         script_id: currentSelectedScriptId,
         dry_run: isDryRunSelected,
+        queue_if_running: queueIfRunning,
       }),
     });
 
     const data = await res.json();
+    if (res.status === 409) {
+      showToast(data.detail || "Job cannot run immediately while another is active. Please queue it.", "warning");
+      return;
+    }
     if (!res.ok) throw new Error(data.detail || "Failed to enqueue");
 
-    showToast(`Added to Queue: ${data.script_name}`, "success");
+    if (data.will_wait_in_queue || data.active_job_running) {
+      showToast(data.message || `Added to queue (#${data.position}): ${data.script_name}`, "info");
+    } else {
+      showToast(`Started: ${data.script_name} (${data.dry_run ? "Dry Run" : "Live"})`, "success");
+    }
     closeDryRunModal();
 
     if (redirectActive) {
@@ -426,9 +548,13 @@ async function clearQueue() {
 }
 
 async function enqueueAllScripts(dryRun = true) {
-  const confirmMsg = dryRun
+  let confirmMsg = dryRun
     ? "Enqueue all 14 scripts in Dry Run mode?"
     : "WARNING: Enqueue all 14 scripts in LIVE mode? File modifications and deletions will occur.";
+
+  if (isEngineRunning && currentActiveJobData) {
+    confirmMsg = `Active job currently running: '${currentActiveJobData.script_name}'.\n\nTo prevent file corruption and SMB share saturation, scripts do NOT run in parallel.\n\nAll 14 scripts will be added to the queue to execute strictly sequentially 1-by-1 after the active job finishes.\n\nProceed to queue all scripts (${dryRun ? 'Dry Run' : 'Live'})?`;
+  }
   if (!confirm(confirmMsg)) return;
 
   try {
@@ -442,11 +568,12 @@ async function enqueueAllScripts(dryRun = true) {
       body: JSON.stringify({
         script_ids: allIds,
         dry_run: dryRun,
+        queue_if_running: true,
       }),
     });
 
     const data = await res.json();
-    showToast(`Enqueued ${data.enqueued_count} scripts (${dryRun ? 'Dry Run' : 'Live'})`, "success");
+    showToast(data.message || `Enqueued ${data.enqueued_count} scripts (${dryRun ? 'Dry Run' : 'Live'})`, "success");
     window.location.href = "/active";
   } catch (err) {
     showToast(`Error: ${err.message}`, "error");

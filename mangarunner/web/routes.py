@@ -123,9 +123,11 @@ async def dashboard_page(request: Request, session: Session = Depends(get_db_ses
     )
 
 @router.get("/scripts", response_class=HTMLResponse)
-def scripts_page(request: Request):
+async def scripts_page(request: Request):
     categories = get_scripts_by_category()
     cfg = load_config()
+    qm = QueueManager.get_instance()
+    queue_status = await qm.get_queue_status()
     return templates.TemplateResponse(
         request=request,
         name="scripts.html",
@@ -134,6 +136,7 @@ def scripts_page(request: Request):
             "categories": categories,
             "total_scripts": len(get_registered_scripts()),
             "manga_root": cfg.manga_root,
+            "queue_status": queue_status,
         },
     )
 

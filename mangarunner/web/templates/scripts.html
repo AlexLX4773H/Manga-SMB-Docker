@@ -20,8 +20,28 @@
 {% endblock %}
 
 {% block content %}
+<!-- Active Job Running Sequential Protection Banner -->
+<div id="scripts-active-banner" class="card card-banner" style="{% if not (queue_status and queue_status.is_running and queue_status.active_run) %}display: none; {% endif %}margin-bottom: 24px; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-left: 4px solid var(--status-warning);">
+  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 14px 18px;">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div class="pulse-dot syncing"></div>
+      <div>
+        <div style="font-weight: 700; color: #fff; font-size: 0.95rem;">
+          Active Job In Progress: <span id="scripts-active-job-name" style="color: #fcd34d;">{{ queue_status.active_run.script_name if (queue_status and queue_status.active_run) else '' }}</span>
+        </div>
+        <div style="font-size: 0.82rem; color: #94a3b8; margin-top: 2px;">
+          Strict 1-by-1 FIFO queue enforced &bull; Triggering any script will queue it sequentially without running in parallel.
+        </div>
+      </div>
+    </div>
+    <a href="/active" class="btn btn-secondary btn-sm" id="scripts-view-queue-btn">
+      View Live Queue (<span id="scripts-queue-count">{{ queue_status.queue_count if queue_status else 0 }}</span> queued) &rarr;
+    </a>
+  </div>
+</div>
+
 <p style="color: var(--text-secondary); margin-bottom: 24px; font-size: 0.95rem;">
-  Browse and trigger your Manga library automations. Clicking <strong>Run Now</strong> or <strong>Add to Queue</strong> will prompt you with a confirmation modal to choose between <strong>Dry Run</strong> or <strong>Live Run</strong>. All jobs run sequentially in a single FIFO queue.
+  Browse and trigger your Manga library automations. Clicking <strong>Run Now</strong> or <strong>Add to Queue</strong> will prompt you with a confirmation modal to choose between <strong>Dry Run</strong> or <strong>Live Run</strong>. If another job is already running, jobs execute strictly sequentially one after another to prevent filesystem and SMB conflicts.
 </p>
 
 {% for cat_name, scripts in categories.items() %}

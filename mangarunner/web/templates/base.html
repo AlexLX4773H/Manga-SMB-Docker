@@ -192,6 +192,32 @@
           Select the execution mode below. Jobs are strictly processed <strong>sequentially (1 after the other)</strong>.
         </p>
 
+        <!-- Active Job In Progress Notice & Sequential Queue Option -->
+        <div id="modal-active-job-notice" style="display: none; margin-bottom: 16px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-md); padding: 14px 16px;">
+          <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <div class="pulse-dot syncing" style="margin-top: 4px; flex-shrink: 0;"></div>
+            <div style="flex-grow: 1;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <strong style="color: #fcd34d; font-size: 0.92rem;">Active Job In Progress</strong>
+                <span class="badge badge-warning" style="font-size: 0.7rem;">Parallel Run Disabled</span>
+              </div>
+              <p style="color: #cbd5e1; font-size: 0.85rem; margin: 4px 0 10px 0; line-height: 1.4;">
+                <span id="modal-active-job-name" style="font-weight: 600; color: #fff;">Another job</span> is currently running.
+                To protect files and SMB shares from corruption, jobs <strong>never run in parallel</strong>.
+              </p>
+              <label class="queue-option-label" style="display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 8px 12px; background: rgba(15, 23, 42, 0.6); border-radius: var(--radius-sm); border: 1px solid rgba(245, 158, 11, 0.25);">
+                <input type="checkbox" id="modal-queue-if-running-chk" checked onchange="toggleQueueOption(this.checked)" style="accent-color: var(--accent-primary); width: 17px; height: 17px; cursor: pointer;">
+                <span style="font-size: 0.85rem; color: #f8fafc; font-weight: 500;">
+                  Queue this job sequentially (Position <span id="modal-queue-target-pos" style="color: #38bdf8; font-weight: 700;">#1</span> in queue)
+                </span>
+              </label>
+              <div id="modal-no-queue-warning" style="display: none; margin-top: 8px; font-size: 0.82rem; color: #f87171; background: rgba(239, 68, 68, 0.1); border-radius: var(--radius-sm); padding: 6px 10px; border: 1px solid rgba(239, 68, 68, 0.2);">
+                ⚠️ Cannot execute immediately while another job is active. Please check the queue option above or cancel.
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Mode Selection Cards -->
         <div class="mode-selector-grid">
           <div class="mode-option-card selected" id="mode-card-dry" onclick="selectExecutionMode(true)">
@@ -221,7 +247,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeDryRunModal()">Cancel</button>
-        <button class="btn btn-secondary" onclick="confirmAndEnqueue(false)">Add to Queue</button>
+        <button class="btn btn-secondary" id="modal-add-queue-btn" onclick="confirmAndEnqueue(false)">Add to Queue</button>
         <button class="btn btn-primary" id="modal-confirm-btn" onclick="confirmAndEnqueue(true)">Run as Dry Run</button>
       </div>
     </div>

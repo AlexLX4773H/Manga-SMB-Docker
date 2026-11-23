@@ -316,10 +316,18 @@ class QueueManager:
                     pass
         return sorted(reports_found)
 
-    async def enqueue_job(self, script_id: str, dry_run: bool = False) -> JobRun:
+    async def enqueue_job(self, script_id: str, dry_run: bool = False, queue_if_running: bool = True) -> JobRun:
         script = get_script_by_id(script_id)
         if not script:
             raise ValueError(f"Script with id '{script_id}' not found.")
+
+        # Check if a job is currently active and parallel execution was refused
+        if not queue_if_running and self.active_run_id is not None:
+            active_name = self.active_job.get("script_name") if self.active_job else "Another job"
+            raise RuntimeError(
+                f"Cannot run '{script.name}' immediately: active job '{active_name}' is currently running, "
+                f"and parallel execution is strictly disabled. Please enable queue option to run sequentially."
+            )
 
         run_id = str(uuid.uuid4())
         session_factory = get_session_factory(self.config.database_path)
@@ -346,11 +354,20 @@ class QueueManager:
             "run_id": run_id,
             "script_name": script.name,
             "dry_run": dry_run,
+            "position": position,
+            "is_waiting_in_queue": self.active_run_id is not None and self.active_run_id != run_id,
         })
         self.ensure_worker_running()
         return job
 
-    async def enqueue_batch(self, script_ids: List[str], dry_run: bool = False) -> List[JobRun]:
+    async def enqueue_batch(self, script_ids: List[str], dry_run: bool = False, queue_if_running: bool = True) -> List[JobRun]:
+        if not queue_if_running and self.active_run_id is not None:
+            active_name = self.active_job.get("script_name") if self.active_job else "Another job"
+            raise RuntimeError(
+                f"Cannot run batch immediately: active job '{active_name}' is currently running, "
+                f"and parallel execution is strictly disabled. Please enable queue option to run sequentially."
+            )
+
         session_factory = get_session_factory(self.config.database_path)
         enqueued_jobs: List[JobRun] = []
 
