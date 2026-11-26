@@ -55,6 +55,19 @@ templates.env.filters["format_duration"] = format_duration
 templates.env.filters["format_datetime"] = format_datetime
 templates.env.filters["time_ago"] = time_ago
 
+DETECTION_MODE_LABELS = {
+    "name_and_hash": "Name and Hash",
+    "visual_similarity": "Visual Similarity",
+    "exact_hash": "Exact Hash Check",
+}
+
+def detection_mode_label(mode: Optional[str]) -> str:
+    if not mode:
+        return ""
+    return DETECTION_MODE_LABELS.get(mode, "")
+
+templates.env.filters["detection_mode_label"] = detection_mode_label
+
 @router.get("/favicon.ico")
 def favicon_route():
     fav_path = static_dir / "favicon.ico"
@@ -84,6 +97,7 @@ async def dashboard_page(request: Request, session: Session = Depends(get_db_ses
             "category": r.category,
             "status": r.status,
             "dry_run": r.dry_run,
+            "detection_mode": r.detection_mode,
             "enqueued_at": r.enqueued_at,
             "duration_seconds": r.duration_seconds,
             "reports": reps,
@@ -184,6 +198,7 @@ def runs_history_page(
             "category": r.category,
             "status": r.status,
             "dry_run": r.dry_run,
+            "detection_mode": r.detection_mode,
             "enqueued_at": r.enqueued_at,
             "started_at": r.started_at,
             "finished_at": r.finished_at,

@@ -14,6 +14,18 @@ from mangarunner.db.models import JobRun
 from mangarunner.engine.script_registry import get_script_by_id
 from shared.config import get_base_dir
 
+DUPLICATE_DETECTION_SCRIPT_ID = "manga_folder_duplicates"
+VALID_DETECTION_MODES = ("name_and_hash", "visual_similarity", "exact_hash")
+DEFAULT_DETECTION_MODE = "name_and_hash"
+
+def normalize_detection_mode(script_id: str, raw: Optional[str]) -> Optional[str]:
+    """Only the manga folder duplicate script stores a mode. Unknown values use Name and Hash."""
+    if script_id != DUPLICATE_DETECTION_SCRIPT_ID:
+        return None
+    if raw in VALID_DETECTION_MODES:
+        return raw
+    return DEFAULT_DETECTION_MODE
+
 class QueueManager:
     """Sequential FIFO runner coordinator and live SSE broadcaster."""
 
@@ -152,6 +164,7 @@ class QueueManager:
             job_category = job.category
             job_script_path = job.script_path
             job_dry_run = job.dry_run
+            job_detection_mode = job.detection_mode
 
         self.active_run_id = run_id
         self._is_cancelled = False
@@ -163,6 +176,7 @@ class QueueManager:
             "script_name": job_script_name,
             "category": job_category,
             "dry_run": job_dry_run,
+            "detection_mode": job_detection_mode,
             "status": "running",
             "started_at": started_at.isoformat(),
         }
@@ -199,8 +213,15 @@ class QueueManager:
         env["MANGA_ROOT"] = self.config.manga_root
         env["REPORTS_DIR"] = self.config.reports_dir
         env["DATA_DIR"] = self.config.data_dir
+        env.pop("DETECTION_MODE", None)
+        if job_script_id == DUPLICATE_DETECTION_SCRIPT_ID:
+            env["DETECTION_MODE"] = job_detection_mode or DEFAULT_DETECTION_MODE
 
-        header_line = f"=== [Job {run_id[:8]}] Starting '{job_script_name}' (Dry Run: {job_dry_run}) at {started_at.strftime('%Y-%m-%d %H:%M:%S UTC')} ===\n"
+        mode_note = f", Detection: {env.get('DETECTION_MODE')}" if "DETECTION_MODE" in env else ""
+        header_line = (
+            f"=== [Job {run_id[:8]}] Starting '{job_script_name}' "
+            f"(Dry Run: {job_dry_run}{mode_note}) at {started_at.strftime('%Y-%m-%d %H:%M:%S UTC')} ===\n"
+        )
         log_file.write(header_line)
         log_file.flush()
         self._emit_log_line(run_id, header_line.strip())
@@ -316,7 +337,13 @@ class QueueManager:
                     pass
         return sorted(reports_found)
 
-    async def enqueue_job(self, script_id: str, dry_run: bool = False, queue_if_running: bool = True) -> JobRun:
+    async def enqueue_job(
+        self,
+        script_id: str,
+        dry_run: bool = False,
+        queue_if_running: bool = True,
+        detection_mode: Optional[str] = None,
+    ) -> JobRun:
         script = get_script_by_id(script_id)
         if not script:
             raise ValueError(f"Script with id '{script_id}' not found.")
@@ -331,6 +358,7 @@ class QueueManager:
 
         run_id = str(uuid.uuid4())
         session_factory = get_session_factory(self.config.database_path)
+        stored_mode = normalize_detection_mode(script.id, detection_mode)
 
         with session_factory() as session:
             queued = crud.get_queued_jobs(session)
@@ -345,6 +373,7 @@ class QueueManager:
                 category=script.category,
                 script_path=script.file_path,
                 dry_run=dry_run,
+                detection_mode=stored_mode,
                 queue_position=position,
             )
 
@@ -354,6 +383,7 @@ class QueueManager:
             "run_id": run_id,
             "script_name": script.name,
             "dry_run": dry_run,
+            "detection_mode": stored_mode,
             "position": position,
             "is_waiting_in_queue": self.active_run_id is not None and self.active_run_id != run_id,
         })
@@ -389,6 +419,7 @@ class QueueManager:
                     category=script.category,
                     script_path=script.file_path,
                     dry_run=dry_run,
+                    detection_mode=normalize_detection_mode(script.id, None),
                     queue_position=max_pos,
                 )
                 enqueued_jobs.append(job)
@@ -480,6 +511,7 @@ class QueueManager:
                     "script_name": active.script_name,
                     "category": active.category,
                     "dry_run": active.dry_run,
+                    "detection_mode": active.detection_mode,
                     "started_at": active.started_at.isoformat() if active.started_at else None,
                 }
             elif self.active_job:
@@ -492,6 +524,7 @@ class QueueManager:
                     "script_name": q.script_name,
                     "category": q.category,
                     "dry_run": q.dry_run,
+                    "detection_mode": q.detection_mode,
                     "position": q.queue_position,
                     "enqueued_at": q.enqueued_at.isoformat() if q.enqueued_at else None,
                 } for q in queued

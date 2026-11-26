@@ -13,6 +13,7 @@ def create_job_run(
     category: str,
     script_path: str,
     dry_run: bool = False,
+    detection_mode: Optional[str] = None,
     queue_position: int = 0,
 ) -> JobRun:
     job = JobRun(
@@ -22,6 +23,7 @@ def create_job_run(
         category=category,
         script_path=script_path,
         dry_run=dry_run,
+        detection_mode=detection_mode,
         status="queued",
         queue_position=queue_position,
         enqueued_at=datetime.now(timezone.utc),

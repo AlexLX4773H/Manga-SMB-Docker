@@ -32,11 +32,15 @@ DEFAULT_SCRIPTS: Dict[str, ScriptInfo] = {
         id="manga_folder_duplicates",
         name="Manga Folder Duplicate & Hash Comparison",
         category="Check Manga",
-        description="Vectorized perceptual image hashing across 12 manga library categories to detect duplicate chapters and subset releases.",
+        description="Duplicate scan across 12 manga libraries. Choose Name and Hash (same chapter number, then similar images), Visual Similarity (all chapters, similar images), or Exact Hash Check (identical image bytes).",
         file_path="Check Manga/Manga_Folder_Comparison_Duplicates.py",
         supports_dry_run=False,
         is_report_only=True,
-        expected_reports=["Master_Manga_Duplicate_Report.xlsx"],
+        expected_reports=[
+            "Master_Manga_Duplicate_Report_NameAndHash.xlsx",
+            "Master_Manga_Duplicate_Report_Visual.xlsx",
+            "Master_Manga_Duplicate_Report_ExactHash.xlsx",
+        ],
         tags=["Hash", "Perceptual", "Duplicates", "Excel"]
     ),
     "check_comicinfo_manga": ScriptInfo(

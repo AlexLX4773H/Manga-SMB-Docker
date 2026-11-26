@@ -10,6 +10,39 @@ let isDryRunSelected = true;
 let isEngineRunning = false;
 let currentActiveJobData = null;
 let currentQueueCount = 0;
+let selectedDetectionMode = "name_and_hash";
+
+const DUPLICATE_SCRIPT_ID = "manga_folder_duplicates";
+const DETECTION_MODE_LABELS = {
+  name_and_hash: "Name and Hash",
+  visual_similarity: "Visual Similarity",
+  exact_hash: "Exact Hash Check",
+};
+
+function detectionModeLabel(mode) {
+  return DETECTION_MODE_LABELS[mode] || "";
+}
+
+function detectionModeBadge(mode) {
+  const label = detectionModeLabel(mode);
+  if (!label) return "";
+  return `<span class="badge badge-secondary" style="margin-left: 6px;">${escapeHtml(label)}</span>`;
+}
+
+function selectDetectionMode(mode) {
+  selectedDetectionMode = DETECTION_MODE_LABELS[mode] ? mode : "name_and_hash";
+  document.querySelectorAll(".detection-mode-card").forEach((card) => {
+    card.classList.toggle("selected", card.dataset.mode === selectedDetectionMode);
+  });
+}
+
+function syncDetectionModeVisibility(scriptId) {
+  const section = document.getElementById("detection-mode-section");
+  if (!section) return;
+  const show = scriptId === DUPLICATE_SCRIPT_ID;
+  section.style.display = show ? "block" : "none";
+  if (show) selectDetectionMode("name_and_hash");
+}
 
 // Toast Notification System
 function showToast(message, type = "info") {
@@ -233,6 +266,14 @@ function updateActivePageUI(isRunning, activeJob, queuedRuns) {
       if (activeCategory) {
         activeCategory.textContent = activeJob.category;
       }
+      const detectionEl = document.getElementById("active-job-detection");
+      const detectionLabel = detectionModeLabel(activeJob.detection_mode);
+      if (detectionEl) {
+        detectionEl.style.display = detectionLabel ? "block" : "none";
+        detectionEl.innerHTML = detectionLabel
+          ? `<span class="badge badge-secondary">${escapeHtml(detectionLabel)}</span>`
+          : "";
+      }
     } else {
       activeTitle.textContent = "No Job Currently Running";
       if (activeBadge) {
@@ -241,6 +282,11 @@ function updateActivePageUI(isRunning, activeJob, queuedRuns) {
       }
       if (activeCategory) {
         activeCategory.textContent = "Queue engine is standing by";
+      }
+      const detectionEl = document.getElementById("active-job-detection");
+      if (detectionEl) {
+        detectionEl.style.display = "none";
+        detectionEl.innerHTML = "";
       }
     }
   }
@@ -268,7 +314,7 @@ function updateActivePageUI(isRunning, activeJob, queuedRuns) {
             <div class="pulse-dot syncing" style="display: inline-block;" title="Currently Executing"></div>
           </td>
           <td>
-            <div style="font-weight: 600; color: #fff;">${escapeHtml(activeJob.script_name)}</div>
+            <div style="font-weight: 600; color: #fff;">${escapeHtml(activeJob.script_name)}${detectionModeBadge(activeJob.detection_mode)}</div>
             <div style="font-size: 0.8rem; color: var(--accent-secondary); font-weight: 600;">${escapeHtml(activeJob.category || '')} &bull; <span style="color: var(--accent-primary);">ACTIVE NOW</span></div>
           </td>
           <td>
@@ -292,7 +338,7 @@ function updateActivePageUI(isRunning, activeJob, queuedRuns) {
         <tr class="queue-row">
           <td style="font-weight: 700; color: var(--accent-primary); width: 48px;">#${idx + 1}</td>
           <td>
-            <div style="font-weight: 600; color: #fff;">${escapeHtml(job.script_name)}</div>
+            <div style="font-weight: 600; color: #fff;">${escapeHtml(job.script_name)}${detectionModeBadge(job.detection_mode)}</div>
             <div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(job.category || '')} &bull; <span style="color: var(--text-secondary);">Queued</span></div>
           </td>
           <td>
@@ -381,6 +427,7 @@ async function openDryRunModal(scriptId, scriptName, category, supportsDryRun = 
 
   if (modalTitle) modalTitle.textContent = scriptName;
   if (modalCategory) modalCategory.textContent = category;
+  syncDetectionModeVisibility(scriptId);
 
   if (reportOnlyNotice) {
     reportOnlyNotice.style.display = supportsDryRun ? "none" : "block";
@@ -467,6 +514,7 @@ async function confirmAndEnqueue(redirectActive = true) {
         script_id: currentSelectedScriptId,
         dry_run: isDryRunSelected,
         queue_if_running: queueIfRunning,
+        detection_mode: currentSelectedScriptId === DUPLICATE_SCRIPT_ID ? selectedDetectionMode : null,
       }),
     });
 

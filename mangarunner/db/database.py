@@ -45,6 +45,14 @@ def init_db(db_path: str = "./data/mangarunner.db") -> None:
         conn.execute(text("PRAGMA journal_mode = WAL;"))
         conn.execute(text("PRAGMA foreign_keys = ON;"))
         Base.metadata.create_all(conn)
+        _ensure_detection_mode_column(conn)
+
+def _ensure_detection_mode_column(conn) -> None:
+    """create_all does not add columns to an existing SQLite table."""
+    rows = conn.execute(text("PRAGMA table_info(job_runs)")).fetchall()
+    columns = {row[1] for row in rows}
+    if columns and "detection_mode" not in columns:
+        conn.execute(text("ALTER TABLE job_runs ADD COLUMN detection_mode VARCHAR(40)"))
 
 def get_db_session() -> Generator[Session, None, None]:
     """Dependency for API routes needing DB access."""

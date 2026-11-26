@@ -122,6 +122,9 @@
           <span class="badge {{ 'badge-warning' if queue_status.active_run.dry_run else 'badge-primary' }}">
             {{ 'DRY RUN' if queue_status.active_run.dry_run else 'LIVE RUN' }}
           </span>
+          {% if queue_status.active_run.detection_mode | detection_mode_label %}
+            <span class="badge badge-secondary">{{ queue_status.active_run.detection_mode | detection_mode_label }}</span>
+          {% endif %}
           <div class="dashboard-active-title">{{ queue_status.active_run.script_name }}</div>
           <div class="dashboard-active-meta">{{ queue_status.active_run.category }} &bull; Started {{ queue_status.active_run.started_at }}</div>
         </div>
@@ -148,7 +151,12 @@
           <div class="queue-item-main">
             <div class="queue-position-badge">#{{ loop.index }}</div>
             <div class="queue-item-text">
-              <div class="queue-script-name">{{ q.script_name }}</div>
+              <div class="queue-script-name">
+                {{ q.script_name }}
+                {% if q.detection_mode | detection_mode_label %}
+                  <span class="badge badge-secondary" style="margin-left: 6px;">{{ q.detection_mode | detection_mode_label }}</span>
+                {% endif %}
+              </div>
               <div class="queue-script-cat">{{ q.category }}</div>
             </div>
           </div>
@@ -245,6 +253,9 @@
                 <span class="badge badge-{{ r.status }}">{{ r.status }}</span>
                 {% if r.dry_run %}
                   <span class="badge badge-warning" style="font-size: 0.7rem;">Dry Run</span>
+                {% endif %}
+                {% if r.detection_mode | detection_mode_label %}
+                  <span class="badge badge-secondary" style="font-size: 0.7rem;">{{ r.detection_mode | detection_mode_label }}</span>
                 {% endif %}
                 <span class="run-item-name" title="{{ r.script_name }}">{{ r.script_name }}</span>
               </div>

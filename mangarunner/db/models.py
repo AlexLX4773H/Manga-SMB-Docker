@@ -22,6 +22,7 @@ class JobRun(Base):
     )  # queued | running | completed | failed | cancelled
     
     dry_run: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    detection_mode: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     queue_position: Mapped[Optional[int]] = mapped_column(Integer, default=0, nullable=True)
     
     enqueued_at: Mapped[datetime] = mapped_column(

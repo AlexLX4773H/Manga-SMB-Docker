@@ -192,6 +192,30 @@
           Select the execution mode below. Jobs are strictly processed <strong>sequentially (1 after the other)</strong>.
         </p>
 
+        <div id="detection-mode-section" style="display: none; margin-bottom: 8px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 8px;">Detection Mode</div>
+          <div class="detection-mode-grid">
+            <div class="mode-option-card detection-mode-card selected" data-mode="name_and_hash" onclick="selectDetectionMode('name_and_hash')">
+              <div class="mode-option-header">
+                <span class="mode-option-title">Name and Hash</span>
+              </div>
+              <p class="mode-option-desc">Same chapter number (Chapter 7 and Chapter 7.1), then similar images.</p>
+            </div>
+            <div class="mode-option-card detection-mode-card" data-mode="visual_similarity" onclick="selectDetectionMode('visual_similarity')">
+              <div class="mode-option-header">
+                <span class="mode-option-title">Visual Similarity</span>
+              </div>
+              <p class="mode-option-desc">Every chapter in a series. Compares how similar the images look. Names are ignored.</p>
+            </div>
+            <div class="mode-option-card detection-mode-card" data-mode="exact_hash" onclick="selectDetectionMode('exact_hash')">
+              <div class="mode-option-header">
+                <span class="mode-option-title">Exact Hash Check</span>
+              </div>
+              <p class="mode-option-desc">Every chapter in a series. Matches only when image file bytes are identical.</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Active Job In Progress Notice & Sequential Queue Option -->
         <div id="modal-active-job-notice" style="display: none; margin-bottom: 16px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-md); padding: 14px 16px;">
           <div style="display: flex; align-items: flex-start; gap: 12px;">

@@ -72,7 +72,12 @@
                 <input type="checkbox" class="run-select-cb" value="{{ r.run_id }}" onchange="updateSelectedRunsCount()" {{ 'disabled' if r.status in ['running', 'queued'] else '' }} style="cursor: pointer; width: 16px; height: 16px; accent-color: var(--accent-primary);">
               </td>
               <td>
-                <div class="run-script-name" style="font-weight: 600; color: #fff;">{{ r.script_name }}</div>
+                <div class="run-script-name" style="font-weight: 600; color: #fff;">
+                  {{ r.script_name }}
+                  {% if r.detection_mode | detection_mode_label %}
+                    <span class="badge badge-secondary" style="margin-left: 6px;">{{ r.detection_mode | detection_mode_label }}</span>
+                  {% endif %}
+                </div>
                 <div style="font-size: 0.78rem; color: var(--text-muted);">{{ r.category }} &bull; <span style="font-family: var(--font-mono);">{{ r.run_id[:8] }}</span></div>
               </td>
               <td>

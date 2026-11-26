@@ -9,6 +9,7 @@ class EnqueueRequest(BaseModel):
     script_id: str
     dry_run: bool = False
     queue_if_running: bool = True  # If another job is currently active, queue it to run sequentially (no parallel runs)
+    detection_mode: Optional[str] = None
 
 class EnqueueBatchRequest(BaseModel):
     script_ids: List[str]
@@ -30,7 +31,12 @@ async def enqueue_job(req: EnqueueRequest):
         is_active_running = qm.active_run_id is not None
         active_name = qm.active_job.get("script_name") if qm.active_job else None
 
-        job = await qm.enqueue_job(req.script_id, dry_run=req.dry_run, queue_if_running=req.queue_if_running)
+        job = await qm.enqueue_job(
+            req.script_id,
+            dry_run=req.dry_run,
+            queue_if_running=req.queue_if_running,
+            detection_mode=req.detection_mode,
+        )
         
         will_wait = is_active_running and (qm.active_run_id != job.run_id)
         msg = (

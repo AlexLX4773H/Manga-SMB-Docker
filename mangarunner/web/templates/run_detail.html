@@ -29,6 +29,9 @@
         <span class="badge {{ 'badge-warning' if run.dry_run else 'badge-primary' }}">
           {{ 'Dry Run' if run.dry_run else 'Live Run' }}
         </span>
+        {% if run.detection_mode | detection_mode_label %}
+          <span class="badge badge-secondary">{{ run.detection_mode | detection_mode_label }}</span>
+        {% endif %}
       </div>
       <h2 style="font-size: 1.35rem; font-weight: 700; color: #fff; margin-top: 8px;">
         {{ run.script_name }}
